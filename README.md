@@ -13,9 +13,9 @@ The Ubuntu Forums "support-info" script queries the users computer and prepares 
 
 You can either run it from the command line with these commands:
 
-    wget -N -t 5 -T 10 https://github.com/Mafoelffen1/support-info/raw/main/support-info && \
-    chmod +x support-info && \
-    ./support-info
+  wget -N -t 5 -T 10 https://github.com/Mafoelffen1/support-info/raw/main/support-info && \
+  chmod +x support-info && \
+  ./support-info
 
 This will download the script, make it executable, and run it, all in a row.
 
