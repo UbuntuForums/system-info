@@ -13,7 +13,7 @@ The Ubuntu Forums "support-info" script queries the users computer and prepares 
 
 You can either run it from the command line with these commands:
 
-    wget -N -t 5 -T 10 https://raw.githubusercontent.com/Mafoelffen1/support-info/main/support-info && \
+    wget -N -t 5 -T 10 https://github.com/Mafoelffen1/support-info/raw/main/support-info && \
     chmod +x Report.sh && \
     ./Report.sh
 
@@ -27,4 +27,4 @@ Or, if `zenity` or `kdialog` is installed, run it from the GUI this way:
 2. Make it executable
 3. Run it from your file browser or a Run dialog
 
-[1]: https://raw.githubusercontent.com/Mafoelffen1/support-info/main/support-info
+[1]: https://github.com/Mafoelffen1/support-info/raw/main/support-info
