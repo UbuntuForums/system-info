@@ -1,5 +1,5 @@
 ## Ubuntu Forums support-info Script
-The "Ubuntu Forums Support Script" queries the users computer so that Ubunutu Forums Community Members can see what they are recommending solutions for:
+The Ubuntu Forums "support-info" script queries the users computer and prepares a report, so that Ubunutu Forums Community Members can see what they are recommending solutions for:
 ## Details
 
 - Creates the file `support-info.txt` at the base of the user's home directory.
@@ -13,7 +13,7 @@ The "Ubuntu Forums Support Script" queries the users computer so that Ubunutu Fo
 
 You can either run it from the command line with these commands:
 
-    wget -N -t 5 -T 10 https://github.com/Mafoelffen1/support-info/raw/master/support-info/support-info && \
+    wget -N -t 5 -T 10 https://raw.githubusercontent.com/Mafoelffen1/support-info/main/support-info && \
     chmod +x Report.sh && \
     ./Report.sh
 
@@ -27,4 +27,4 @@ Or, if `zenity` or `kdialog` is installed, run it from the GUI this way:
 2. Make it executable
 3. Run it from your file browser or a Run dialog
 
-[1]: https://github.com/Mafoelffen1/support-info/raw/master/support-info/support-info
+[1]: https://raw.githubusercontent.com/Mafoelffen1/support-info/main/support-info
