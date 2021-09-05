@@ -1,8 +1,8 @@
-## Ubuntu Forums support-info Script
-The Ubuntu Forums "support-info" script queries the users computer and prepares a report, so that Ubunutu Forums Community Members can see what they are recommending solutions for:
+## Ubuntu Forums system-info Script
+The Ubuntu Forums "system-info" script queries the users computer and prepares a report, so that Ubunutu Forums Community Members can see what they are recommending solutions for:
 ## Details
 
-- Creates the file `support-info.txt` at the base of the user's home directory.
+- Creates the file `system-info.txt` at the base of the user's home directory.
 - Masks all sensitive info, like IP addresses, MAC addresses, Full FQDN and Serial numbers, automatically in a meaningful way.
 - The script displays the report results within the 'less' utility to review the results, one screen at a time. To navigate from there, press the space bar, left, right, up, down, page up or page down keys to navigate. If in a graphical terminal session, you can also use mouse navigation. Press the "q" key to exit "less" and continue. It will print the final report and offer to upload to pastebin site.
 - Offers to post the results to the Ubuntu `pastebinit` provider if that program is installed, and a sufficiently reliable internet connection is available. This is the easiest way to share the sanitized results with the Ubuntu Comminity for support. After succssful upload to the pastebin, it will both display and log the URL of the uploaded report (`~/suport-info-link.log`), for you to copy and paste in your post on the Ubuntu Forums.
@@ -13,8 +13,8 @@ The Ubuntu Forums "support-info" script queries the users computer and prepares 
 
 You can either run it from the command line with these commands:
 
-    wget -N -t 5 -T 10 https://github.com/Mafoelffen1/support-info/raw/main/support-info && \
-    chmod +x support-info && \
+    wget -N -t 5 -T 10 https://github.com/Mafoelffen1/system-info/raw/main/system-info && \
+    chmod +x system-info && \
     ./support-info
 
 This will download the script, make it executable, and run it, all in a row.
@@ -27,4 +27,4 @@ Or, if `zenity` or `kdialog` is installed, run it from the GUI this way:
 2. Make it executable
 3. Run it from your file browser or a Run dialog
 
-[1]: https://github.com/Mafoelffen1/support-info/raw/main/support-info
+[1]: https://github.com/Mafoelffen1/system-info/raw/main/system-info
