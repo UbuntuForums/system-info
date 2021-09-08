@@ -91,7 +91,7 @@ function CheckPrerequisites()
     	free
     	gsettings
     	gzip
-    	mokuitl
+    	mokutil
     	curl
     	ls
     	rm
@@ -582,7 +582,7 @@ function GetOriginalInstallDate()
     # Makes best logical efforts.
     if [ $(sudo find /var/log/installer/ -type f | wc -l) -ne 0  ]
     then
-        installer_date=$(sudo find /var/log/installer/ -type f -printf "%T+\n"   | sort| head -1)
+        installer_date=$(sudo find /var/log/installer/ -type f 2> /dev/null | -printf "%T+\n"   | sort| head -1)
         installer_date="Original Installation Date:         ${setansi} ${installer_date%.*} $ransi"
     else
 #        sudo find / -maxdepth 1 -type d -printf "%T+ %p\n"| sort| head -1  # uncomment for debugging
