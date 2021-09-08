@@ -756,7 +756,7 @@ function Paster() ##* Currently in Test
                      --data-urlencode "content@${PASTEBIN_CONTENT:-$report}" \
                      --data "poster=${PASTEBIN_POSTER:-`whoami`@`hostname`}" \
                      --data "syntax=${PASTEBIN_SYNTAX:-text}" \
-                     --data "expiration=${PASTEBIN_EXPIRATION:-day}")
+                     --data "expiration=${PASTEBIN_EXPIRATION:-week}")
                  if [ $? -eq 0 ]
                  then
                     paste_done=true
