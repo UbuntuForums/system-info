@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ## MAFoElffen, <mafoelffen@ubuntu.com>, 2021.08.19
-## Version 00.07-03, 2021.09.07
+## 
 ## Contributers:
 ##     sudodus <nio.wiklund@gmail.com>, 2021.08.25
 ##     Doug S,  2021.08.22
@@ -33,7 +33,8 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 00.07-03, Script Date: 2021.09.06"
+version="Version: 01.00-00, Script Date: 2021.09.15"
+md5_sum=$(md5sum ./$sname)
 arg1=$1
 # Set Report filename and path to
 sname="${0##*/}"   # flexible, needs quoting everywhere if spaces
@@ -43,6 +44,7 @@ LANG=C
 # Set a pretty ANSI screen decoration for displaying the report onscreen
 blueback="\0033[1;37;44m"
 redback="\0033[1;37;41m"
+faintvid="\0033[2m"
 resetvid="\0033[0m"
 # Check boot mode
 boot_mode=$( [ -d /sys/firmware/efi ] && echo "UEFI Firmware mode" || echo "Legacy mode (alias CSM alias BIOS mode)" )
@@ -51,6 +53,15 @@ less_status="less"
 up_status= "true"
 # Report timestamp
 startt="$(date '+%F  %T %Z (%z)')"
+# Logger settings
+#     Change verbosity to show level of warnings. Range: -1 through 5
+verbosity=5
+silent_lvl=0
+crt_lvl=1
+err_lvl=2
+wrn_lvl=3
+inf_lvl=4
+dbg_lvl=5
 
 ########################################################################
 #### Functions:
@@ -64,16 +75,45 @@ function CheckRoot()
         echo -e "$redback Do not run this script with sudo or as root$resetvid"
         exit
     else
-        sudo echo "Running Script: ${0##*/} ..."
+        sudo echo "Running Script: ${sname} $version"
     fi
 }
 
 function CheckVersion()
 {
-    # Versioning: At the commandline: [<ScriptName> -v] returns <VersionInfo>, then exits. Called by Main().
+    # Version or Help Panel. Called by Main().
     if [[ "$arg1" == "-v" ]]
     then
+        # Versioning: At the commandline: [<ScriptName> -v] returns <VersionInfo>, then exits. 
         echo -e "$version";
+        exit;
+    elif [[ "$arg1" == "-h" ]] || [[ "$arg1" == "--help" ]]
+    then
+        # Help Panel: At the commandline: [<ScriptName> -h or --help] returns this usage panel, then exits. 
+        echo -e "md5sum: "$(md5sum ./$sname | sed 's/.\.\/.*//g' )
+        nl
+        echo -e "Description: The Ubuntu Forums \"system-info\" script queries the users "
+        echo -e "computer and prepares a report, so that Ubuntu Forums Community Members "
+        echo -e "can see what they are recommending solutions for."
+        nl
+        echo -e "Usage:    ./${sname} <option> "
+        nl
+        echo -e "Options: "
+        echo -e "    -v    Returns Version Information and exits."
+        echo -e "    -h or --help    Displays this help screen, then exits."
+        nl
+        echo -e "Asks the user 2 questions to describe the problem they are having, then "
+        echo -e "creates $sname.txt in their Home directrory."
+        nl
+        echo -e "Will check programs used by this script, and give the user the option to "
+        echo -e "quit to install anything it finds missing. Will give the user the option "
+        echo -e "to upload the report to a pastebin and displays the URL of that to add "
+        echo -e "their post on Ubuntu Forums."
+        nl
+        echo -e "Or they can manually paste the report within code tags in a post or to a "
+        echo -e "pastebin. Or added as a text attahment to a post."
+        nl
+        echo -e "We have tried to keep this safe and simple to use."
         exit;
     fi
 }
@@ -93,6 +133,9 @@ function CheckPrerequisites()
     	gzip
     	mokutil
     	curl
+    	pastebinit
+    	nc
+    	wget
     	ls
     	rm
     	sed
@@ -104,7 +147,7 @@ function CheckPrerequisites()
     	lsusb
     	sleep
     	sort
-    	pastebinit
+    	whoami
     	who'
 
     # Programs that are in /usr/sbin or /sbin.
@@ -112,28 +155,24 @@ function CheckPrerequisites()
     	lshw'
 
     check_prog=1;
-    check_pastebinit=1;
     check_mokutil=1;
 
     for Program in ${Programs} ${Programs_SBIN} 
     do
         if [ $(type ${Program} > /dev/null 2>&1 ; echo $?) -ne 0 ]
         then
-            if [[ "$Program" == "pastebinit" ]]   # If this missing, it is an option. 
-            then
-                check_pastebinit=0;    # Set Flag to false and recheck in Paster()
-            elif [[ "$Program" == "mokutil" ]]   # TODO # Look at this further...
+            if [[ "$Program" == "mokutil" ]]
             then    # If not 'Here' condition
-                # If this missing, it is a variant for UEFI systems only. But may work on 18.04 where it was not default yet, and would 
-                # be a useful option to see if there "is" a SecureBoot option in the BIOS... Besides just what it is set at. There is no 
-                # way to 'guess' at if it might have been 'booted" as a Legacy, but is actually a UEFI capable BIOS... Maybe stretch 
-                # looking into this as a possibillity to explore that. To  query the BIOS and see if it is actually UEFI, but it was 
-                # booted as Legacy boot. That would be fine if it was, and would be beyond what Linux Kernel looks at... But we do not 
-                # want to force this on Legacy only BIOS users... Or not? I've never used this tool on a Legacy BIOS, because I just knew 
-                # it was the wrong tool for those, and just assumed it would crash the system.
-                echo -e "$redback \"${Program}\" could not be found. $resetvid" 
+                # If this missing, it is a variant for UEFI systems only. It does work on 18.04 where it was not default yet, and is 
+                # a useful option to see if there "is" a SecureBoot option in the BIOS, besides just what it is set at. This, during 
+                # tests, is safe to install on Legacy Only BIOS systems and can be used to tell if the BIOS is such.
+                echo -e "$faintvid \"${Program}\" could not be found. This program is suggested.$resetvid" 
+                echo -e "If this is older hardware that is 'Legacy Only BIOS', then this can be ignored."
                 check_mokutil=0;    # Set Flag to false and recheck in GetSb()
-                check_prog=0
+                check_prog=0;
+            else
+                echo -e "$Program is not installed."
+                check_prog=0;
             fi
         fi
     done
@@ -141,7 +180,8 @@ function CheckPrerequisites()
     if [ "$check_prog" == 0 ]
     then
         nl
-        echo -e "Required basic Linux utilities not found."
+        echo -e "The Script 'system-info' uses  some very basic Linux utilities. "
+        echo -e "Some of these utilities were not found."
         ans=
         while [ "$ans" != "e" ] && [ "$ans" != "c" ]
         do
@@ -202,11 +242,11 @@ function GetCPU()
     echo -e "  --- Computer/CPU Information --- "
     $lshw_cmd -C cpu \
         | sed -r '/^  *([a-z])/ s/([a-zA-Z])/\u&/' \
-        | sed -e 's/^ *\*-cpu/Cpu/g' \
+        | sed -e 's/^ *\*-cpu/\*-Cpu/g' \
         | sed '/Capabilities/ s/ *Capabilities/  Capabilities/' \
         | fold -sw 71 \
         |sed -e 's/^[^ ]/           &/' \
-        -e 's/ *Cpu/Cpu/g' \
+        -e 's/ *\*-Cpu/\*-Cpu/g' \
         -e 's/ Capabilities/   Capabilities/' \
         -e 's/       /    /' \
         -e '/Capabilities/ s/^[^ ]/          &/'
@@ -539,6 +579,38 @@ function GetGraphicsEnv()
 
 function GetRepositories()
 {
+    # Gets Repository Information. Called once by Writer(). ** TODO Proposed
+    echo -e "${setansi}---------- Repository Information:$ransi"
+    nl
+    sources=$(grep -v '#' /etc/apt/sources.list | sed -e /^$/d )
+    # sourcesd=$(grep -v '#' /etc/apt/sources.list.d/* | sed -e /^$/d)
+    echo -e "Sources List:"
+    echo -e "$sources"
+    nl
+    file_path="/etc/apt/sources.list.d/"
+    if [ $(find $file_path -type f 2> /dev/null | wc -l) -ne 0 ] 
+    then  
+        echo -e "Sources List from SourcesD:"
+        sourcesd_files=$(find $file_path -type f 2> /dev/null )
+        for list_file in $sourcesd_files
+        do
+            lines=$(grep -v '#' $list_file | sed -e /^$/d )
+            #line_count=$( wc -l <<< "$lines" )
+            if [ "$lines" != "" ]
+            then
+                echo -e "$list_file:"
+                echo -e "$lines"
+            else
+                echo -e "$list_file:"
+                echo -e "File had no entries."
+            fi
+        done
+        nl
+    fi
+}
+
+function GetRepositoriesOld()
+{
     # Gets Repository Informations. Called once by Writer().
     echo -e "${setansi}---------- Repository Information:$ransi"
     nl
@@ -548,7 +620,7 @@ function GetRepositories()
     echo -e "$sources"
     nl
     if [ $(find /etc/apt/sources.list.d/ -type f 2> /dev/null | wc -l) -ne 0 ]
-    then
+    then  # prevent showing files that have commented out lines / empty
         sourcesd=$(grep -v '#' /etc/apt/sources.list.d/* | sed -e /^$/d \
          | sed 's/:deb/:\n  deb/')
         echo -e "Sources List from SourcesD:"
@@ -567,6 +639,9 @@ function GetOtherDetails()
     GetInstallMedia
     GetDistUpgradeDate
     nl
+    GetHweKernels
+    CheckHwe
+    CheckIfCertifiedHardwarePlatform
     echo -e "Currently logged in User(s):"
     who -H
     nl
@@ -582,7 +657,7 @@ function GetOriginalInstallDate()
     # Makes best logical efforts.
     if [ $(sudo find /var/log/installer/ -type f | wc -l) -ne 0  ]
     then
-        installer_date=$(sudo find /var/log/installer/ -type f 2> /dev/null | -printf "%T+\n"   | sort| head -1)
+        installer_date=$(sudo find /var/log/installer/ -type f -printf "%T+\n"   | sort| head -1 2> /dev/null )
         installer_date="Original Installation Date:         ${setansi} ${installer_date%.*} $ransi"
     else
 #        sudo find / -maxdepth 1 -type d -printf "%T+ %p\n"| sort| head -1  # uncomment for debugging
@@ -616,6 +691,48 @@ function GetDistUpgradeDate()
     else
         echo -e "Do-Release-Upgrade Date: This system may have not had a 'Release Upgrade' through 'do-release-upgrade'"
     fi
+}
+
+function GetHweKernels()
+{
+    show_kernels=$(apt-cache show linux-generic-hwe-$(lsb_release -sr) \
+        | awk '/Depends:/ {print "For HWE Package: " $2 ", Kernel Version: " $4}' \
+        | sed -e 's/..$//' -e 's/~.*//')
+    echo -e "   --- HWE Kernel Reference:"
+    echo -e "$show_kernels"
+    nl
+}
+
+function CheckHwe()
+{
+    return_status=$(dpkg -s linux-generic-hwe-$(lsb_release -sr) 2>&1 \
+        | grep 'Status\|dpkg-query' )
+    echo -e "   --- HWE Package Status:"
+        if [[ "$return_status" == *"Status:"* ]]
+        then 
+            echo -e "Package linux-generic-hwe-$(lsb_release -sr) is installed."
+        elif [[ "$return_status" == *"is not installed"* ]]
+        then
+            echo -e "HWE package linux-generic-hwe-$(lsb_release -sr) was not detected. Please check "
+            echo -e "kernel version to verify range"
+        fi
+        nl
+}
+
+function CheckIfCertifiedHardwarePlatform()
+{
+    platform_check=$(ubuntu-drivers list-oem 2> /dev/null )
+    echo -e "   --- Certified Hardware Platform Status:"
+    if [ -z $platform_check ]
+    then
+        echo -e "Ubuntu Certified Hardware Platform. Safe to install "
+        echo -e "the Hardware Enablement Stack (HWE)."
+    else
+        echo -e "Hardware meta packages were listed. Please refrain from manually changing "
+        echo -e "the kernel flavours. The Hardware Enablement Stack (HWE) should not be "
+        echo -e "installed on this platform. "
+    fi
+    nl
 }
 
 function AdjustForLessStatus()
@@ -702,10 +819,96 @@ function Writer
     ReportFooter
 }
 
-function CheckCurl()
+function PasteCurl()
 {
-    [ -e /usr/bin/curl ];
-    check_curl=$?
+    return_url=$(curl -fsSL -X POST \
+        --url $target \
+        --output /dev/null \
+        --write-out "%{url_effective}\n" \
+        --data-urlencode "content@${PASTEBIN_CONTENT:-$report}" \
+        --data "poster=${PASTEBIN_POSTER:-`whoami`@`hostname`}" \
+        --data "syntax=${PASTEBIN_SYNTAX:-text}" \
+        --data "expiration=${PASTEBIN_EXPIRATION:-week}")
+    check_paste=$?
+    # debug "Response: $return_url Exit Code: $check_paste" 1;
+}
+
+function PastePastebinit()
+{
+    return_url=$(pastebinit \
+        -a "$USER" \
+        -i "$report" \
+        -b "$target" \
+        -t "$sname.txt")
+    check_paste=$?
+    # debug "Response: $return_url Exit Code: $check_paste" 1;
+}
+
+function PasteWget()
+{
+    return_url=$(wget --quiet -O- --post-data="$(cat $report)" 'termbin.com:9999' | tr '\0' '\n' )
+    check_paste=$?
+    # debug "Response: $return_url Exit Code: $check_paste" 1;
+}
+
+function PasteNc()
+{
+    echo -e "This uses a program which sometimes conflicts with " 
+    echo -e "Anti-Virus Programs. You should turn that off if you "
+    echo -e "have installed."
+    read -p "Would you like to proceed or skip? (y/N) " ans
+    if [[ ${ans,} =~ ^[Yy]$ ]]
+    then
+        return_url=$(cat $report | nc termbin.com 9999 | tr '\0' '\n')
+        check_paste=$?
+        # debug "Response: $return_url Exit Code: $check_paste" 1;
+    else
+        echo -e "You skipped uploading to Pastebin."
+        check_paste=1
+    fi
+}
+
+function CheckPasterProgs()
+{
+    if [ -e /usr/bin/curl ]
+    then
+        paste_prog=1;
+    elif [ -e /usr/bin/pastebinit ]
+    then
+        paste_prog=2;
+    elif [ -e /usr/bin/wget ]
+    then
+        paste_prog=3;
+    elif [ -e /usr/bin/nc ] || [ -e /bin/nc ]
+    then
+        paste_prog=4;
+    else
+        paste_prog=0;
+        echo -e "Many utilites were not found. Something is wrong.";
+    fi
+}
+
+function DoPaste()
+{
+    prog_here=$1
+    #echo -e "Passed $prog_here"
+    case "$prog_here" in
+        1)
+            PasteCurl
+            ;;
+        2)
+            PastePastebinit
+            ;;
+        3)
+            PasteWget
+            ;;
+        4)
+            PasteNc
+            ;;
+        *)
+            echo -e "Something went wrong. Error out of range."
+            exit 1
+    esac    
 }
 
 function ProgressActive()
@@ -725,19 +928,18 @@ function ProgressActive()
     stdbuf -oL echo -en '\b '
 }
 
-function Paster() ##* Currently in Test
+function Paster() 
  {
-     # Provides curl upload of report with a progress bar. Called once by Main().
+     # Provides an upload of report with a progress bar. Called once by Main().
      target="https://paste.ubuntu.com"
      linklog="$HOME/${sname}-link.log"
-     #linklog="$HOME/system-info-link.log"
 
      echo -e "$blueback Sensitive data is [REMOVED] from the report file $resetvid"
-     CheckCurl  # Check if 'curl' is installed and set check_curl. 0 if true, 1 if false
-     ## Eval check_curl
-     if [ $check_curl -eq 0 ]
+     CheckPasterProgs     
+     ## Eval $paste_prog
+     if [ $paste_prog -ne 0 ]
      then 
-         read -p "Do you want to upload the report file fo '$target'? (y/N) " ans
+         read -p "Do you want to upload the report file to '$target'? (y/N) " ans
          if [[ ${ans,} =~ ^[Yy]$ ]]
          then
              GetPingStatus "www.ubuntu.com"
@@ -749,15 +951,8 @@ function Paster() ##* Currently in Test
                  tput civis
                  keep_spinning=$(mktemp)
                  ProgressActive "$keep_spinning" & pid_progressactive=$!
-                 return_url=$(curl -fsSL -X POST \
-                     --url $target \
-                     --output /dev/null \
-                     --write-out "%{url_effective}\n" \
-                     --data-urlencode "content@${PASTEBIN_CONTENT:-$report}" \
-                     --data "poster=${PASTEBIN_POSTER:-`whoami`@`hostname`}" \
-                     --data "syntax=${PASTEBIN_SYNTAX:-text}" \
-                     --data "expiration=${PASTEBIN_EXPIRATION:-week}")
-                 if [ $? -eq 0 ]
+                 DoPaste $paste_prog
+                 if [ $check_paste -eq 0 ]
                  then
                     paste_done=true
                  else
@@ -782,11 +977,16 @@ function Paster() ##* Currently in Test
                      nl
                  fi
              else
-                    echo -e" No connection to pastebin.ubuntu.com " | tee -a "$linklog"
+                    echo -e "No connection to pastebin.ubuntu.com " | tee -a "$linklog"
+                    echo -e "Please copy the file $report to a USB and post "
+                    echo -e "from a computer that does have a working connection."
+                    echo -e "Upload the file manually: 'copy & paste' to"
+                    nl
+                    echo -e "https://paste.ubuntu.com/"
              fi
          fi
     else
-        echo -e "$redback    The package 'curl' is not installed.    $resetvid"
+        echo -e "$redback    The required package was not installed.    $resetvid"
         nl
         echo -e "Either rerun the script after installing curl, or"
         echo -e "Upload the file manually: 'copy & paste' to"
@@ -796,69 +996,63 @@ function Paster() ##* Currently in Test
     fi
 }
 
-function PasterOld() 
+# The following Basic Logger was based on public domain code 
+#     from https://gist.github.com/goodmami/6556701 
+# Rewritten by MAFoElffen, 2021.09.15
+function notify() 
 {
-    # Provides pastebinit upload of report. Calls ProgressActive(). Called once by Main().
-    #    command: pastebinit -a $USER -i $HOME/system-info.txt" -b "paste.ubuntu.com" -t "system-info.txt"
-    #    returned: https://paste.ubuntu.com/p/SRZwqjHjJZ/
-    target="paste.ubuntu.com"
-    linklog="$HOME/${sname}-link.log"
-    echo -e "$blueback Sensitive data is [REMOVED] from the report file $resetvid"
-    ## Eval check_pastebinit
-    if [ $check_pastebinit -eq 1 ]
-    then 
-        read -p "Do you want to upload the report file fo '$target'? (y/N) " ans
-        if [[ ${ans,} =~ ^[Yy]$ ]]
-        then
-            GetPingStatus "www.ubuntu.com"
-            if [ "$return_status" == "true" ]
-            then
-                echo "Uploading '$report' to '$target'"
-                echo -e "This may take 1-2 minutes..."
-                nl
-                tput civis
-                keep_spinning=$(mktemp)
-                ProgressActive "$keep_spinning" & pid_progressactive=$!
-                return_url=$(pastebinit -a "$USER" -i "$report" -b "$target" -t "$sname.txt")
-                if [ $? -eq 0 ]
-                then
-                    paste_done=true
-                else
-                    paste_done=false
-                fi
-                rm "$keep_spinning"
-                sleep 0.5
-                tput cnorm
-                if $paste_done
-                then
-                    echo -e "Uploaded Report: ${startt}:" >> "$linklog"
-                    echo -e "$blueback Upload successful $resetvid"
-                    nl
-                    echo -e "The link to the pastebin is saved in: '$linklog'"
-                    nl
-                    echo -e "View at: $return_url" | tee -a "$linklog"
-                    nl
-                else
-                    echo -e "$redback Upload failed $resetvid"
-                    echo -e "Upload the file manually: 'copy & paste' to"
-                    echo -e "https://paste.ubuntu.com/"
-                    nl
-                fi
-            else
-                   echo -e" No connection to pastebin.ubuntu.com " | tee -a "$linklog"
-            fi
-        fi
-    else
-        echo -e "$redback    The package 'pastebinit' is not installed.    $resetvid"
-        nl
-        echo -e "Either rerun the script after installing pastebinit, or"
-        echo -e "Upload the file manually: 'copy & paste' to"
-        nl
-        echo -e "https://paste.ubuntu.com/"
-        nl
-    fi
+    logger $silent_lvl "NOTE: $1" $2; 
 }
 
+function critical() 
+{
+    logger $crt_lvl "CRITICAL: $1" $2; 
+}
+
+error() 
+{ 
+   logger $err_lvl "ERROR: $1" $2; 
+}
+
+warn() 
+{ 
+    logger $wrn_lvl "WARNING: $1" $2; 
+}
+
+inf() 
+{ 
+    logger $inf_lvl "INFO: $1" $2; 
+}
+
+debug() 
+{ 
+    logger $dbg_lvl "DEBUG: $1" $2; 
+}
+
+logger() 
+{
+    case "$3" in
+        1)
+            exec 3>&2     # logging stream (file descriptor 3) defaults to STDERR
+            ;;
+        2) 
+            exec 3>> $logfile     # send to log file
+            ;;
+        3)
+            exec 3>&2 | tee $logfile     # send to both logfile and screen
+            ;;
+        *)
+            echo -e "Something went wrong. Log option out of range."
+            exit 1
+            ;;
+    esac
+    
+    
+    if [ $verbosity -ge $1 ]; then
+        # Expand escaped characters, wrap at 70 chars, indent wrapped lines
+        echo -e "$startt $2" | fold -w70 -s | sed '2~1s/^/  /' >&3
+    fi
+}
 
 
 ########################################################################
