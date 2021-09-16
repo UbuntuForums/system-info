@@ -90,7 +90,8 @@ function CheckVersion()
     elif [[ "$arg1" == "-h" ]] || [[ "$arg1" == "--help" ]]
     then
         # Help Panel: At the commandline: [<ScriptName> -h or --help] returns this usage panel, then exits. 
-        echo -e "md5sum: "$(md5sum ./$sname | sed 's/.\.\/.*//g' )
+        echo "Running Script: ${sname} $version"
+        echo -e "md5sum: "$(md5sum $sname | sed 's/system.*//g' )
         nl
         echo -e "Description: The Ubuntu Forums \"system-info\" script queries the users "
         echo -e "computer and prepares a report, so that Ubuntu Forums Community Members "
@@ -1062,8 +1063,8 @@ logger()
 #### MAIN
 ########################################################################
 ## PreProcessing
-CheckRoot    # Check if ran as root
 CheckVersion    # Versioning. At the commandline: [<ScriptName> -v] returns <VersionInfo>, then exits.
+CheckRoot    # Check if ran as root
 CheckPrerequisites
 ## Report
 UserInput
