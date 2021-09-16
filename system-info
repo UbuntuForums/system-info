@@ -334,7 +334,7 @@ function GetSb()
         echo -e "\tthis information, please install 'mokutil' and rerun script."
     else
         # For Legacy only BIOS, returns error: "EFI variables are not supported on this system"
-        error_mokutil=$(mokutil --sb-state 2>&1 > /dev/null)
+        error_mokutil=$(mokutil --sb-state 2>&1)
         if [[  "$error_mokutil" == *"EFI variables"*  ]]
         then
             echo -e "$error_mokutil"
@@ -350,6 +350,9 @@ function GetSb()
             then
                 printf "%-20s %s\n" SecureBoot: disabled
             else
+                # This system doesn't support Secure Boot
+                # Secure Boot is enabled
+                # Secure Boot is disabled
                 printf "%-20s %s\n" ${sb_state/ /: }
             fi
         fi
