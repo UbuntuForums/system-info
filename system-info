@@ -34,8 +34,9 @@
 ########################################################################
 # Versioning
 version="Version: 01.00-00, Script Date: 2021.09.15"
-md5_sum=$(md5sum ./$sname)
+#md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
+arg2=$2
 # Set Report filename and path to
 sname="${0##*/}"   # flexible, needs quoting everywhere if spaces
 report="$HOME/${sname}.txt"
@@ -54,8 +55,8 @@ up_status= "true"
 # Report timestamp
 startt="$(date '+%F  %T %Z (%z)')"
 # Logger settings
-#     Change verbosity to show level of warnings. Range: -1 through 5
-verbosity=5
+#     Change verbosity to show level of warnings. Range: -1 through 5. -1 is show nothing.
+verbosity=-1
 silent_lvl=0
 crt_lvl=1
 err_lvl=2
@@ -79,7 +80,7 @@ function CheckRoot()
     fi
 }
 
-function CheckVersion()
+function CheckArgs()
 {
     # Version or Help Panel. Called by Main().
     if [[ "$arg1" == "-v" ]]
@@ -100,11 +101,14 @@ function CheckVersion()
         echo -e "Usage:    ./${sname} <option> "
         nl
         echo -e "Options: "
-        echo -e "    -v    Returns Version Information and exits."
-        echo -e "    -h or --help    Displays this help screen, then exits."
+        echo -e "    -v              Returns Version Information and exits."
+        echo -e "    -h or --help    Displays this Help Screen, then exits."
+        echo -e "    -s # or --show  #  Changes Verbosity levels of the logger."
+        echo -e "        # range 0 through 5"
+        echo -e "        Example: system-info -s 5  turns on debugging messages"
         nl
         echo -e "Asks the user 2 questions to describe the problem they are having, then "
-        echo -e "creates $sname.txt in their Home directrory."
+        echo -e "creates $sname.txt in their Home directory."
         nl
         echo -e "Will check programs used by this script, and give the user the option to "
         echo -e "quit to install anything it finds missing. Will give the user the option "
@@ -112,10 +116,19 @@ function CheckVersion()
         echo -e "their post on Ubuntu Forums."
         nl
         echo -e "Or they can manually paste the report within code tags in a post or to a "
-        echo -e "pastebin. Or added as a text attahment to a post."
+        echo -e "pastebin. Or added as a text attachment to a post."
         nl
         echo -e "We have tried to keep this safe and simple to use."
         exit;
+    elif [[ "$arg1" == "-s" ]] || [[ "$arg1" == "--show" ]]
+    then
+        if [ $arg2 -ge -1 ] && [ $arg2 -le 5 ]
+        then 
+            verbosity=$arg2
+        else
+            echo -e "Option out of range."
+            exit 1;
+        fi
     fi
 }
 
@@ -135,6 +148,8 @@ function CheckPrerequisites()
     	mokutil
     	curl
     	pastebinit
+    	ubuntu-drivers
+    	dpkg
     	nc
     	wget
     	ls
@@ -162,6 +177,7 @@ function CheckPrerequisites()
     do
         if [ $(type ${Program} > /dev/null 2>&1 ; echo $?) -ne 0 ]
         then
+            echo -e " --- Some Programs Were Missing --- "
             if [[ "$Program" == "mokutil" ]]
             then    # If not 'Here' condition
                 # If this missing, it is a variant for UEFI systems only. It does work on 18.04 where it was not default yet, and is 
@@ -171,10 +187,12 @@ function CheckPrerequisites()
                 echo -e "If this is older hardware that is 'Legacy Only BIOS', then this can be ignored."
                 check_mokutil=0;    # Set Flag to false and recheck in GetSb()
                 check_prog=0;
+                debug "$Program is not installed" 1
             else
                 echo -e "$Program is not installed."
                 check_prog=0;
             fi
+            echo -e ' -------------------------------- "
         fi
     done
 
@@ -188,6 +206,7 @@ function CheckPrerequisites()
         do
             read -p "<E>xit and install the program(s) or <C>ontinue anyway? <E/C> " ans 
             ans="${ans,}" 
+            debug "User answered $ans" 1
             if [[ $ans =~ ^[Ee]$ ]]
             then
                 echo -e "Please install the missing programs listed above before rerunning script." 
@@ -289,7 +308,7 @@ function GetDmi()
         do
             if [ ! -f $smbios_compliant$dmi_var ]
             then
-                #echo -e "DEBUG: Deleting $dmi_var from array..."
+                debug "Deleting $dmi_var from array..." 1
                 dmi_vars=( "${dmi_vars[@]/$dmi_var}" )
             fi
             dmi_idx+=1
@@ -335,7 +354,7 @@ function GetSb()
         echo -e "\tthis information, please install 'mokutil' and rerun script."
     else
         # For Legacy only BIOS, returns error: "EFI variables are not supported on this system"
-        error_mokutil=$(mokutil --sb-state 2>&1)
+        error_mokutil=$(mokutil --sb-state 2>&1 )
         if [[  "$error_mokutil" == *"EFI variables"*  ]]
         then
             echo -e "$error_mokutil"
@@ -346,15 +365,20 @@ function GetSb()
                 echo -e "\tbut package mokutil was not installed. If you would like to check"
                 echo -e "\tthis information, please install 'mokutil' and rerun script."                
         else
-            sb_state=$(mokutil --sb-state)
+            sb_state=$(mokutil --sb-state 2>&1 )
+            debug "sb_state: $sb_state" 1
             if [[ $sb_state == "Failed to read SecureBoot" ]]
             then
-                printf "%-20s %s\n" SecureBoot: disabled
+                sb_disabled="SecureBoot: Disabled"
+                #printf "%-20s %s\n" ${sb_disabled/ /: }
+                echo -e "$sb_disabled"
             else
+                # These are the three known messages returned from UEFI
                 # This system doesn't support Secure Boot
                 # Secure Boot is enabled
-                # Secure Boot is disabled
-                printf "%-20s %s\n" ${sb_state/ /: }
+                # Failed to read SecureBoot
+                #printf "%-20s %s\n" ${sb_state/ /: }
+                echo -e "$sb_state"
             fi
         fi
         nl
@@ -442,7 +466,9 @@ function GetIP()
         ip_addr=$(ip addr | grep -e '^[[:space:][1-9]:' -e 'inet.')
         echo -e "$ip_addr"
     else
-        ip_addr=$(ip addr | grep -e '^[[:space:][1-9]:' -e 'inet.' | sed '/inet\s/ s/inet\s.*/inet [REMOVED]/g' | sed '/inet6\s.*/ s/inet6\s.*/inet6 [REMOVED]/g')
+        ip_addr=$(ip addr | grep -e '^[[:space:][1-9]:' -e 'inet.' \
+            | sed '/inet\s/ s/inet\s.*/inet [REMOVED]/g' \
+            | sed '/inet6\s.*/ s/inet6\s.*/inet6 [REMOVED]/g')
         echo -e "$ip_addr"
     fi
     nl
@@ -476,7 +502,7 @@ function CheckIpUp()
             up_status="true"
         fi
     else
-        echo -e "Debug: 'show_silent' call out of range $show_silent"
+        debug -e "'show_silent' call out of range $show_silent" 1
     fi
 }
 
@@ -664,7 +690,7 @@ function GetOriginalInstallDate()
         installer_date=$(sudo find /var/log/installer/ -type f -printf "%T+\n"   | sort| head -1 2> /dev/null )
         installer_date="Original Installation Date:         ${setansi} ${installer_date%.*} $ransi"
     else
-#        sudo find / -maxdepth 1 -type d -printf "%T+ %p\n"| sort| head -1  # uncomment for debugging
+        debug "$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n"| sort| head -1 )" 1 
         installer_date=$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n"| sort| head -1)
         installer_date="Estimated Installation Date:        ${setansi} ${installer_date%.*} $ransi"
     fi
@@ -699,6 +725,7 @@ function GetDistUpgradeDate()
 
 function GetHweKernels()
 {
+    echo -e "These are the current kernel ranges for HWE kernels for this release."
     show_kernels=$(apt-cache show linux-generic-hwe-$(lsb_release -sr) \
         | awk '/Depends:/ {print "For HWE Package: " $2 ", Kernel Version: " $4}' \
         | sed -e 's/..$//' -e 's/~.*//')
@@ -726,7 +753,7 @@ function CheckHwe()
 function CheckIfCertifiedHardwarePlatform()
 {
     platform_check=$(ubuntu-drivers list-oem 2> /dev/null )
-    echo -e "   --- Certified Hardware Platform Status:"
+    echo -e "   --- Certified Hardware Platform Status: (By the Ubuntu Wiki Standards)"
     if [ -z $platform_check ]
     then
         echo -e "Ubuntu Certified Hardware Platform. Safe to install "
@@ -812,6 +839,7 @@ function Writer
 {
     # Report template. Called twice by Main().
     less_status="$1"
+    debug "less_status: $less_status" 1
     AdjustForLessStatus
     ReportHeader
     GetMachineInfo    
@@ -834,7 +862,7 @@ function PasteCurl()
         --data "syntax=${PASTEBIN_SYNTAX:-text}" \
         --data "expiration=${PASTEBIN_EXPIRATION:-week}")
     check_paste=$?
-    # debug "Response: $return_url Exit Code: $check_paste" 1;
+    debug "Response: $return_url Exit Code: $check_paste" 1;
 }
 
 function PastePastebinit()
@@ -845,14 +873,14 @@ function PastePastebinit()
         -b "$target" \
         -t "$sname.txt")
     check_paste=$?
-    # debug "Response: $return_url Exit Code: $check_paste" 1;
+    debug "Response: $return_url Exit Code: $check_paste" 1;
 }
 
 function PasteWget()
 {
     return_url=$(wget --quiet -O- --post-data="$(cat $report)" 'termbin.com:9999' | tr '\0' '\n' )
     check_paste=$?
-    # debug "Response: $return_url Exit Code: $check_paste" 1;
+    debug "Response: $return_url Exit Code: $check_paste" 1;
 }
 
 function PasteNc()
@@ -865,7 +893,7 @@ function PasteNc()
     then
         return_url=$(cat $report | nc termbin.com 9999 | tr '\0' '\n')
         check_paste=$?
-        # debug "Response: $return_url Exit Code: $check_paste" 1;
+        debug "Response: $return_url Exit Code: $check_paste" 1;
     else
         echo -e "You skipped uploading to Pastebin."
         check_paste=1
@@ -889,13 +917,14 @@ function CheckPasterProgs()
     else
         paste_prog=0;
         echo -e "Many utilites were not found. Something is wrong.";
+        debug "All progs used for paste where not found" 1
     fi
 }
 
 function DoPaste()
 {
     prog_here=$1
-    #echo -e "Passed $prog_here"
+    debug "Passed $prog_here" 1
     case "$prog_here" in
         1)
             PasteCurl
@@ -965,6 +994,7 @@ function Paster()
                  rm "$keep_spinning"
                  sleep 0.5
                  tput cnorm
+                 debug "paste_done: $paste_done" 1
                  if $paste_done
                  then
                      echo -e "Uploaded Report: ${startt}:" >> "$linklog"
@@ -1063,7 +1093,7 @@ logger()
 #### MAIN
 ########################################################################
 ## PreProcessing
-CheckVersion    # Versioning. At the commandline: [<ScriptName> -v] returns <VersionInfo>, then exits.
+CheckArgs    # Check external arguments: [<ScriptName> arg1]
 CheckRoot    # Check if ran as root
 CheckPrerequisites
 ## Report
