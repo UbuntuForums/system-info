@@ -107,8 +107,13 @@ function CheckArgs()
         echo -e "        # range 0 through 5"
         echo -e "        Example: system-info -s 5  turns on debugging messages"
         nl
-        echo -e "Asks the user 2 questions to describe the problem they are having, then "
-        echo -e "creates $sname.txt in their Home directory."
+        echo -e "Parts of the script need elevated permissions (sudo) to get the correct " 
+        echo -e "information from your system, while other parts do not. We have "
+        echo -e "determined where that needs to be used and when not. While the script is "
+        echo -e "running, you will be asked to enter your userID's password."
+        nl
+        echo -e "It then asks the user 2 questions to describe the problem they are having, "
+        echo -e "then creates $sname.txt in their Home directory."
         nl
         echo -e "Will check programs used by this script, and give the user the option to "
         echo -e "quit to install anything it finds missing. Will give the user the option "
@@ -145,6 +150,7 @@ function CheckPrerequisites()
     	free
     	gsettings
     	gzip
+    	md5sum
     	mokutil
     	curl
     	pastebinit
