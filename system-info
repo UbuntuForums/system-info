@@ -64,9 +64,21 @@ wrn_lvl=3
 inf_lvl=4
 dbg_lvl=5
 
+# Trap Control-C
+stty -echoctl # hide ^C
+trap 'other_commands' SIGINT
+
 ########################################################################
 #### Functions:
 ########################################################################
+function other_commands()
+{
+    tput setaf 1
+    printf "You can 'not' exit this script by pressing Control-C..."
+    tput sgr0
+    printf "Continue with last 'asked' input..."
+}
+
 function CheckRoot()
 {
     clear;
@@ -76,7 +88,16 @@ function CheckRoot()
         echo -e "$redback Do not run this script with sudo or as root$resetvid"
         exit
     else
-        sudo echo "Running Script: ${sname} $version"
+        echo -e "This script needs some parts of it to run with elevated permissions."
+        echo -e "Please enter your password for that to happen."
+        sudo -k # revoke previously cached sudo password 
+        if sudo true
+        then 
+            echo "Running Script: ${sname} $version"
+        else 
+            echo "Password was incorrect for sudo elevated rights. Exiting Script."
+            exit 1
+        fi
     fi
 }
 
