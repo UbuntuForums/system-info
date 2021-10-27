@@ -81,7 +81,7 @@ function other_commands()
 
 function CheckRoot()
 {
-    clear;
+    clear -x;
     ## Check if ran as root. Runs at startup. Called by Main()
     if [[ "$EUID" == 0 ]]
     then 
@@ -204,14 +204,14 @@ function CheckPrerequisites()
     do
         if [ $(type ${Program} > /dev/null 2>&1 ; echo $?) -ne 0 ]
         then
-            echo -e " --- Some Programs Were Missing --- "
+            echo -e " --- Some Programs This Script Uses Were Missing --- "
             if [[ "$Program" == "mokutil" ]]
             then    # If not 'Here' condition
                 # If this missing, it is a variant for UEFI systems only. It does work on 18.04 where it was not default yet, and is 
                 # a useful option to see if there "is" a SecureBoot option in the BIOS, besides just what it is set at. This, during 
                 # tests, is safe to install on Legacy Only BIOS systems and can be used to tell if the BIOS is such.
                 echo -e "$faintvid \"${Program}\" could not be found. This program is suggested.$resetvid" 
-                echo -e "If this is older hardware that is 'Legacy Only BIOS', then this can be ignored."
+                echo -e "$faintvid If this is older hardware that is 'Legacy Only BIOS', then this can be ignored."
                 check_mokutil=0;    # Set Flag to false and recheck in GetSb()
                 check_prog=0;
                 debug "$Program is not installed" 1
@@ -267,7 +267,7 @@ function UserInput()
     echo -e "Please provide some \"Basic Information\"..."
     read -p "What is the Main Complaint (summarized)? " main_complaint
     read -p "Describe the Problem: " problem_description
-    clear
+    clear -x
 }
 
 function GetMachineInfo()
@@ -284,9 +284,9 @@ function GetMachineInfo()
 function GetCPU()
 {
     # Gets CPU Information. Called once by GetMachineInfo().
-    echo -e "${setansi}---------- General computer specs:$ransi"
+    echo -e "${setansi}---------- General Computer Specifications:$ransi"
     nl
-    echo -e "  --- Computer/CPU Information --- "
+    echo -e "  --- Computer/CPU Information from 'lshw -C cpu' --- "
     $lshw_cmd -C cpu \
         | sed -r '/^  *([a-z])/ s/([a-zA-Z])/\u&/' \
         | sed -e 's/^ *\*-cpu/\*-Cpu/g' \
@@ -324,7 +324,7 @@ function GetDmi()
 		board_serial
 		board_asset_tag'
 
-    echo -e "------------------ SMBIOS Information"
+    echo -e "------------------ SMBIOS Information from '/sys/class/dmi/id/' "
     
     if [ -d $smbios_compliant ]
     then
@@ -372,7 +372,7 @@ function GetSb()
 {
     # Gets SafeBoot Info from UEFI BIOS or if not UEFI capable. Called once by GetDMI().
     # Warns user if mokutil was not present.
-    #echo -e "   --- SecureBoot Status:"
+    #echo -e "   --- SecureBoot Status from 'mokutil --sb-state':"
     if [ $check_mokutil -eq 0 ] 
     then
         echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
@@ -424,7 +424,7 @@ function GetMem()
 function GetUsb()
 {
     # Gets USB information. Called once by Writer().
-    echo -e "${setansi}---------- USB Information:$ransi"
+    echo -e "${setansi}---------- USB Information from 'lsusb -t -v':$ransi"
     usb_info=$(lsusb -t -v)
     echo -e "$usb_info"
     nl
@@ -439,7 +439,7 @@ function GetNetworkingInfo()
     then
         GetInternetStatus
     else
-        echo -e "  --- Internet Connection Status --- "
+        echo -e "  --- Internet Connection Status from 'ip addr' --- "
         echo -e "Skipped getting Internet Status. Connection: $up_status"
         nl
     fi
@@ -451,7 +451,7 @@ function GetInternetStatus()
     # Verifies ping status and relsolv. Called once by GetNetworkingInfo().
     ping -c 1 www.google.com > /dev/null
     pingStatus=$?
-    echo -e "  --- Internet Connection Status --- "
+    echo -e "  --- Internet Connection Status from 'ping [various addresses]' --- "
     if [ $pingStatus == 0 ]
     then 
         echo -e "Connected to Internet with DNS"
@@ -486,7 +486,7 @@ function GetIP()
 {
     # Get IP related information. Called once by GetNetworkingInfo().
     echo -e "${setansi}---------- IP Adress Information:$ransi"
-    echo -e "  --- IP Adress Information --- "
+    echo -e "  --- IP Adress Information from 'ip addr' --- "
     # Grab IP adress information
     if [ "$less_status" == "less" ]
     then
@@ -508,7 +508,7 @@ function CheckIpUp()
     ip_devices_up=$(ip addr | grep -e '^[[:space:][1-9]:.*UP,LOWER_UP' | sed 's/.*virb.*:.*\|.*lo:.*LOOPBACK.*//g' | sed -e /^$/d)
     if [ "$show_silent" == "show" ]
     then
-        echo -e "  --- Network Device Status Summary ---  "
+        echo -e "  --- Network Device Status Summary from 'ip addr' ---  "
         if [ "$ip_devices_up" == "" ]
         then
             echo -e "No Network Devices up..."
@@ -536,7 +536,7 @@ function CheckIpUp()
 function GetFQDN()
 {
     # Gets Hostname information. Called once by GetMachineInfo().
-    echo -e "  --- Hostname ---  "
+    echo -e "  --- Hostname from 'hostname --fqdn' ---  "
     if [ "$less_status" == "less" ]
     then
         host_name=$(hostname --fqdn)
@@ -588,7 +588,7 @@ function GetGraphicsEnv()
         echo -e "$lshw_data"
     fi
     nl
-    echo -e "   --- Graphics Environment Continued ----" 
+    echo -e "   --- Graphics Environment Continued form 'various graphics ENVs' ----" 
     if [ $XDG_CURRENT_DESKTOP ] 
     then 
         echo -e "The Current Configured Destop is: $XDG_CURRENT_DESKTOP " 
@@ -637,7 +637,7 @@ function GetGraphicsEnv()
 function GetRepositories()
 {
     # Gets Repository Information. Called once by Writer(). ** TODO Proposed
-    echo -e "${setansi}---------- Repository Information:$ransi"
+    echo -e "${setansi}---------- Repository Information from '/etc/apt/sources.list and etc/apt/sources.list.d/':$ransi"
     nl
     sources=$(grep -v '#' /etc/apt/sources.list | sed -e /^$/d )
     # sourcesd=$(grep -v '#' /etc/apt/sources.list.d/* | sed -e /^$/d)
@@ -669,7 +669,7 @@ function GetRepositories()
 function GetRepositoriesOld()
 {
     # Gets Repository Informations. Called once by Writer().
-    echo -e "${setansi}---------- Repository Information:$ransi"
+    echo -e "${setansi}---------- Repository Information from '/etc/apt/sources.list':$ransi"
     nl
     sources=$(grep -v '#' /etc/apt/sources.list | sed -e /^$/d )
 #    sourcesd=$(grep -v '#' /etc/apt/sources.list.d/* | sed -e /^$/d)
@@ -689,7 +689,7 @@ function GetRepositoriesOld()
 function GetOtherDetails()
 {
     # Gets Other General Details. Gets called once by Writer().
-    echo -e "${setansi}---------- Other Details:$ransi"
+    echo -e "${setansi}---------- Other Details from 'Various':$ransi"
     echo -e "The current kernel version is:      ${setansi} $(uname -r) $ransi"
     echo -e "The current release description is: ${setansi} $(lsb_release -sd) $ransi"
     GetOriginalInstallDate
@@ -712,13 +712,13 @@ function GetOriginalInstallDate()
 {
     # Gets the original installation date. Called once by GetOtherDetails().
     # Makes best logical efforts.
-    if [ $(sudo find /var/log/installer/ -type f | wc -l) -ne 0  ]
+    if [ $(sudo find /var/log/installer/ -type f 2> /dev/null | wc -l) -ne 0  ]
     then
-        installer_date=$(sudo find /var/log/installer/ -type f -printf "%T+\n"   | sort| head -1 2> /dev/null )
+        installer_date=$(sudo find /var/log/installer/ -type f -printf "%T+\n" 2> /dev/null | sort| head -1 2> /dev/null )
         installer_date="Original Installation Date:         ${setansi} ${installer_date%.*} $ransi"
     else
-        debug "$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n"| sort| head -1 )" 1 
-        installer_date=$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n"| sort| head -1)
+        debug "$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" > /dev/null | sort| head -1 )" 1 
+        installer_date=$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" 2> /dev/null | sort | head -1)
         installer_date="Estimated Installation Date:        ${setansi} ${installer_date%.*} $ransi"
     fi
     echo -e "$installer_date"
@@ -753,10 +753,10 @@ function GetDistUpgradeDate()
 function GetHweKernels()
 {
     echo -e "These are the current kernel ranges for HWE kernels for this release."
-    show_kernels=$(apt-cache show linux-generic-hwe-$(lsb_release -sr) \
+    show_kernels=$(apt-cache show linux-generic-hwe-$(lsb_release -sr) 2> /dev/null \
         | awk '/Depends:/ {print "For HWE Package: " $2 ", Kernel Version: " $4}' \
-        | sed -e 's/..$//' -e 's/~.*//')
-    echo -e "   --- HWE Kernel Reference:"
+        | sed -e 's/..$//' -e 's/~.*//') 2> /dev/null 
+    echo -e "   --- HWE Kernel Reference from 'apt-cache show':"
     echo -e "$show_kernels"
     nl
 }
@@ -765,7 +765,7 @@ function CheckHwe()
 {
     return_status=$(dpkg -s linux-generic-hwe-$(lsb_release -sr) 2>&1 \
         | grep 'Status\|dpkg-query' )
-    echo -e "   --- HWE Package Status:"
+    echo -e "   --- HWE Package Status from 'dpkg':"
         if [[ "$return_status" == *"Status:"* ]]
         then 
             echo -e "Package linux-generic-hwe-$(lsb_release -sr) is installed."
