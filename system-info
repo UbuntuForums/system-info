@@ -211,12 +211,12 @@ function CheckPrerequisites()
                 # a useful option to see if there "is" a SecureBoot option in the BIOS, besides just what it is set at. This, during 
                 # tests, is safe to install on Legacy Only BIOS systems and can be used to tell if the BIOS is such.
                 echo -e "$faintvid \"${Program}\" could not be found. This program is suggested.$resetvid" 
-                echo -e "$faintvid If this is older hardware that is 'Legacy Only BIOS', then this can be ignored."
+                echo -e "$faintvid If this is older hardware that is 'Legacy Only BIOS', then this can be ignored.$resetvid"
                 check_mokutil=0;    # Set Flag to false and recheck in GetSb()
                 check_prog=0;
-                debug "$Program is not installed" 1
+                debug "'$Program' is not installed" 1
             else
-                echo -e "$Program is not installed."
+                echo -e "'$Program' is not installed."
                 check_prog=0;
             fi
             echo -e " -------------------------------- "
@@ -554,7 +554,7 @@ function GetDiskInfo()
     df -hT -x tmpfs -x devtmpfs | grep -v '/snap/'
     nl
     echo -e "${setansi}---------- Disk/Partition Information From 'fdisk':$ransi"
-    sudo fdisk -l | sed '/\/dev\/loop/,+3 d' 2> /dev/null | uniq
+    sudo fdisk -l 2>&1 | sed '/\/dev\/loop/,+3 d' 2> /dev/null | uniq
     nl
     echo -e "${setansi}---------- Disk/Partition Information From 'lsblk':$ransi"
     lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT,MODEL | grep -v '/snap/'
@@ -718,7 +718,21 @@ function GetOriginalInstallDate()
         installer_date="Original Installation Date:         ${setansi} ${installer_date%.*} $ransi"
     else
         debug "$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" > /dev/null | sort| head -1 )" 1 
-        installer_date=$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" 2> /dev/null | sort | head -1)
+        #installer_date=$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" 2> /dev/null | sort | head -1)
+        installer_date=$( \
+            for i in /*; \
+            do \
+                if ! mountpoint -q "$i"; \
+                then \
+                    stat --format='%y %n' "$i"; \
+                else \
+                    echo -e 'Could not accurately determine original Installation Date.'
+                fi; \
+            done \
+            | sort \
+            | head -1 \
+            | sed 's/ .*//' )
+        #installer_date=$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" 2> /dev/null | sort | head -1)
         installer_date="Estimated Installation Date:        ${setansi} ${installer_date%.*} $ransi"
     fi
     echo -e "$installer_date"
