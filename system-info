@@ -116,7 +116,7 @@ function CheckRoot()
     if [[ "$EUID" == 0 ]] || [ $UID -eq 0 ]
     then 
         echo -e "$redback Do not run this script with sudo or as root$resetvid"
-        echo -e "If your Linux ditribution installs with only a Root User as a default, "
+        echo -e "If your Linux distribution installs with only a Root User as a default, "
         echo -e "please create another User that has the ability to run elevated commands. "
         PassPhrase
         #exit_code=106
@@ -268,7 +268,7 @@ function RefreshScript() {
 
     sudo wget -N -t 5 -T 10 https://github.com/UbuntuForums/system-info/raw/main/system-info
     sudo chmod +x system-info
-    echo -e "Script was refeshed."
+    echo -e "Script was refreshed."
     nl
     unset DIR SOURCE
 }
@@ -329,7 +329,7 @@ function GetReleaseDescription()
    if [[ "$os_name" == "" ]]
    then
        echo -e "There was a problem determining the Release Description... "
-       echo -e "Here is the raw outout of the release file(s) to determine manually:"
+       echo -e "Here is the raw output of the release file(s) to determine manually:"
        grep --color=never '=' /etc/*release
        debug "GetReleaseDescription(). Dumped release file info. Condition failed." 1
    else
@@ -722,7 +722,7 @@ function FixNonAsciiVar() {
     VarContent=$2 # Global Var
 
     # Check if field contains non ascii characters
-    # Remember to set whatever the original passed varaible equal to $VarContent after the call
+    # Remember to set whatever the original passed variable equal to $VarContent after the call
     #     to catch the fixed return value.
     if [[ "$VarContent" == "*[!:ascii:]*" ]]
     then
@@ -823,7 +823,7 @@ function GetSb()
     if [ $check_mokutil -eq 0 ] 
     then
         echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
-        echo -e "\tand checks if the system BIOS was UEFI or Lagacy only BIOS, "
+        echo -e "\tand checks if the system BIOS was UEFI or Legacy only BIOS, "
         echo -e "\tbut package mokutil was not installed. If you would like to check"
         echo -e "\tthis information, please install 'mokutil' and rerun script."
     else
@@ -844,7 +844,7 @@ function GetSb()
         elif [[  "$error_mokutil" == *"Command 'mokutil' not found"*  ]] #
         then 
             echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
-            echo -e "\t and checks if the system BIOS was UEFI or Lagacy only BIOS, "
+            echo -e "\t and checks if the system BIOS was UEFI or Legacy only BIOS, "
             echo -e "\tbut package mokutil was not installed. If you would like to check"
             echo -e "\tthis information, please install 'mokutil' and rerun script."                
         else
@@ -874,7 +874,7 @@ function GetSb()
 
 function GetMem()
 {
-    # Gets memory information (pysical and swap). Called once by GetMachineInfo().
+    # Gets memory information (physical and swap). Called once by GetMachineInfo().
     echo -e "${setansi}---------- Memory Information:$ransi"
     mem_stats=$(free -m)
     echo -e "$mem_stats"
@@ -902,7 +902,7 @@ function GetSwap () {
     echo -e "  --- Info from '/proc/swaps'"
     echo -e "$swaps_info"
     nl
-    echo -e "  --- System Swapiness Settings"
+    echo -e "  --- System Swappiness Settings"
     echo -e "Valid swappiness settings are from $valid_settings . "
     echo -e "Current setting in '/proc/sys/vm/swappiness': $sw_proc "
     echo -e "Current configuration setting in '/etc/sysctl.conf file: "
@@ -1087,7 +1087,7 @@ function GetDiskInfo()
     sudo fdisk -l 2>&1 | sed '/\/dev\/loop/,+3 d' 2> /dev/null | uniq
     nl
     echo -e "${setansi}---------- Disk/Partition Information From 'lsblk':$ransi"
-    # Note: sed replacement added to switch out non-ascii charaters of 'lsblk'. 
+    # Note: sed replacement added to switch out non-ascii characters of 'lsblk'. 
     #     'paste.ubuntu.com' does not accept non-ascii characters
     lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT,MODEL | grep -v '/snap/' | sed 's/^[\|,`]-/\|_/g'
     echo -e "   ------- 'lsblk' information continued ..."
@@ -1455,7 +1455,7 @@ function GetGraphicsEnv()
     echo -e "   --- Graphics Environment Continued from 'various graphics ENVs' ----" 
     if [ "$XDG_CURRENT_DESKTOP" != "" ] 
     then 
-        echo -e "The Current Configured Destop is: $XDG_CURRENT_DESKTOP " 
+        echo -e "The Current Configured Desktop is: $XDG_CURRENT_DESKTOP " 
     else
         echo -e "The Current Configured Desktop is: <Not Populated> " 
     fi
@@ -1531,7 +1531,7 @@ function GetGraphicsEnv()
 }
 
 function GetSoundDevices() {
-    # Retreive Sound device ID's 
+    # Retrieve Sound device ID's 
     echo -e "${setansi}---------- Sound Device Information From 'lspci':$ransi"
     sound_device_list=$(sudo -i lspci | \
         grep --color=never -i -e 'audio ' | \
@@ -1922,7 +1922,7 @@ function GetUserInstalled()
         user_installed=$(mktemp /tmp/UserInstalled-XXXXX)
         # Use apt-mark to list all packages marked as manually installed. 
         apt-mark showmanual | sort -u > $manually_installed
-        # Check to see if defualt installed list exists
+        # Check to see if default installed list exists
         # for prebuilt system images, it does not exist
         if [ -f /var/log/installer/initial-status.gz ]
         then 
@@ -2310,7 +2310,7 @@ function ArchiveReport() {
                     fi
                     cwd=$(pwd)    # Save current directory
                     cd $HOME
-                    # Create Archive without any parent direcetories
+                    # Create Archive without any parent directories
                     tar -czvf ${sname}.tar.gz ${sname}.txt
                     exit_code=$?
                     # Check if archive was created successfully (catch exit code)
@@ -2520,7 +2520,7 @@ function Paster()
                  debug "Paste_done: $paste_done" 1
                  if $paste_done
                  then
-                     # Check $return_url for NULLL
+                     # Check $return_url for NULL
                      if [ "$return_url" != "" ]
                      then
                          echo -e "Uploaded Report: ${startt}:" >> "$linklog"
@@ -2693,5 +2693,5 @@ exit $exit_code
 #   - Document logic flow
 #
 # Add DEBUG statements:
-#   - To be able to step through logic flow for maintenence.
+#   - To be able to step through logic flow for maintenance.
 # 
