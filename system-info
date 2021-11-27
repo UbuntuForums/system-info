@@ -485,8 +485,8 @@ function GetPingStatus()
 function GetIP()
 {
     # Get IP related information. Called once by GetNetworkingInfo().
-    echo -e "${setansi}---------- IP Adress Information:$ransi"
-    echo -e "  --- IP Adress Information from 'ip addr' --- "
+    echo -e "${setansi}---------- IP Address Information:$ransi"
+    echo -e "  --- IP Address Information from 'ip addr' --- "
     # Grab IP adress information
     if [ "$less_status" == "less" ]
     then
