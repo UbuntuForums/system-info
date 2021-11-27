@@ -487,7 +487,7 @@ function GetIP()
     # Get IP related information. Called once by GetNetworkingInfo().
     echo -e "${setansi}---------- IP Address Information:$ransi"
     echo -e "  --- IP Address Information from 'ip addr' --- "
-    # Grab IP adress information
+    # Grab IP address information
     if [ "$less_status" == "less" ]
     then
         ip_addr=$(ip addr | grep -e '^[[:space:][1-9]:' -e 'inet.')
