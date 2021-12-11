@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-01, Script Date: 2021.09.30"
+version="Version: 01.00-02, Script Date: 2021.12.04"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -54,6 +54,12 @@ less_status="less"
 up_status= "true"
 # Report timestamp
 startt="$(date '+%F  %T %Z (%z)')"
+# LST Name for package calc
+LTS_PKG=""
+# variables to keep track of missing programs...
+missing_programs=""
+check_paster=0
+missing_paster_progs=""
 # Logger settings
 #     Change verbosity to show level of warnings. Range: -1 through 5. -1 is show nothing.
 verbosity=-1
@@ -204,30 +210,54 @@ function CheckPrerequisites()
     do
         if [ $(type ${Program} > /dev/null 2>&1 ; echo $?) -ne 0 ]
         then
-            echo -e " --- Some Programs This Script Uses Were Missing --- "
+            if [[ "$check_prog" == "1" ]]
+            then
+                echo -e " --- Some Programs This Script Uses Were Missing --- "
+            fi
             if [[ "$Program" == "mokutil" ]]
             then    # If not 'Here' condition
                 # If this missing, it is a variant for UEFI systems only. It does work on 18.04 where it was not default yet, and is 
                 # a useful option to see if there "is" a SecureBoot option in the BIOS, besides just what it is set at. This, during 
                 # tests, is safe to install on Legacy Only BIOS systems and can be used to tell if the BIOS is such.
-                echo -e "$faintvid \"${Program}\" could not be found. This program is suggested.$resetvid" 
+                echo -e "$faintvid \"${Program}\" Could not be found. This program is suggested.$resetvid" 
                 echo -e "$faintvid If this is older hardware that is 'Legacy Only BIOS', then this can be ignored.$resetvid"
+                echo -e "$faintvid The report will still run without it. It will just not be able to answer one question. $resetvid"
                 check_mokutil=0;    # Set Flag to false and recheck in GetSb()
                 check_prog=0;
+                missing_programs="$missing_programs\n$Program"
                 debug "'$Program' is not installed" 1
+            elif [[ "$Program" == "pastebinit" ]] || [[ "$Program" == "wget" ]] || [[ "$Program" == "curl" ]] || [[ "$Program" == "nc" ]]
+                then
+                check_prog=0;
+                check_paster=$($check_paster+1);
+                missing_paster_progs="$missing_paster_progs$Program, "
+                missing_programs="$missing_programs\n$Program"
             else
                 echo -e "'$Program' is not installed."
                 check_prog=0;
+                missing_programs="$missing_programs\n$Program"
             fi
-            echo -e " -------------------------------- "
         fi
     done
-
+    
     if [ "$check_prog" == 0 ]
     then
+        echo -e " -------------------------------- "
         nl
-        echo -e "The Script 'system-info' uses  some very basic Linux utilities. "
+        echo -e "The Script 'system-info' uses some very basic Linux utilities. "
         echo -e "Some of these utilities were not found."
+        nl
+        echo -e "The report will still run without them. It will just not answer related questions."
+        echo -e "Some of that information may be related to the diagnosis of your installed system."
+        echo -e "If missing utilities may have answered your specified problem, you may "
+        echo -e "be asked by a 'Ubuntu Forums Member' supporting you if a program was missing, and "
+        echo -e "if you could install it to answer that related question."
+        nl
+        CheckPaster
+        echo -e "Some of these utilities are not default installed utilities to all Editions, "
+        echo -e "versions, and flavors of Ubuntu... So may be considered as optional. "
+        nl
+       
         ans=
         while [ "$ans" != "e" ] && [ "$ans" != "c" ]
         do
@@ -247,6 +277,37 @@ function CheckPrerequisites()
     else
         echo -e "All required programs installed..."
         sleep 1
+    fi
+}
+
+function CheckPaster() {
+    if [ $check_paster -eq 4 ]
+    then
+        echo -e "Programs 'pastebinit', 'curl', 'wget', and 'nc' are missing. "
+        echo -e "All 4 utilities used to upload this report to a PasteBin are missing."
+        echo -e "The report will still run. If not installed, you would just need to "
+        echo -e "paste the report into a post, contained within 'CODE' Tags."
+        nl
+    fi
+    if [ $check_paster -le 3 -a $check_paster -ge 1 ]
+    then
+        echo -e "Program(s) $missing_paster_progs is/are missing, "
+        echo -e "but can be ignored as there still are installed utilities present to "
+        echo -e "to be able to upload the report to an online PasteBin."
+        nl
+    fi  
+}
+
+function ProcessMissingPrograms() {
+    echo -e "---- Required Programs For Report."
+    if [[ "$missing_programs" == "" ]]
+    then
+        echo -e "    All required programs installed for report. "
+        nl
+    else
+        echo -e "    --- Some Programs This Script Uses Were Missing --- "
+        echo -e "$missing_programs" | awk 'NF && !/^(start|#)/ {print "    " $0}'
+        nl
     fi
 }
 
@@ -485,9 +546,9 @@ function GetPingStatus()
 function GetIP()
 {
     # Get IP related information. Called once by GetNetworkingInfo().
-    echo -e "${setansi}---------- IP Adress Information:$ransi"
-    echo -e "  --- IP Adress Information from 'ip addr' --- "
-    # Grab IP adress information
+    echo -e "${setansi}---------- IP Address Information:$ransi"
+    echo -e "  --- IP Address Information from 'ip addr' --- "
+    # Grab IP address information
     if [ "$less_status" == "less" ]
     then
         ip_addr=$(ip addr | grep -e '^[[:space:][1-9]:' -e 'inet.')
@@ -588,7 +649,7 @@ function GetGraphicsEnv()
         echo -e "$lshw_data"
     fi
     nl
-    echo -e "   --- Graphics Environment Continued form 'various graphics ENVs' ----" 
+    echo -e "   --- Graphics Environment Continued from 'various graphics ENVs' ----" 
     if [ $XDG_CURRENT_DESKTOP ] 
     then 
         echo -e "The Current Configured Destop is: $XDG_CURRENT_DESKTOP " 
@@ -597,7 +658,10 @@ function GetGraphicsEnv()
     fi
     if [ $DESKTOP_SESSION ]
     then
-        echo -e "The Current Desktop Session is: $DESKTOP_SESSION " 
+        echo -e "The Current Desktop Session is: $DESKTOP_SESSION "
+        xmode=$(xrandr -q | egrep --color=never -e 'Screen' -e 'connected primary')
+        echo -e "The Current X Desktop Information Details from 'xrandr' are: "
+        echo -e "$xmode" 
     else
         echo -e "The Current Desktop Session is: <Not Populated> " 
     fi
@@ -666,26 +730,6 @@ function GetRepositories()
     fi
 }
 
-function GetRepositoriesOld()
-{
-    # Gets Repository Informations. Called once by Writer().
-    echo -e "${setansi}---------- Repository Information from '/etc/apt/sources.list':$ransi"
-    nl
-    sources=$(grep -v '#' /etc/apt/sources.list | sed -e /^$/d )
-#    sourcesd=$(grep -v '#' /etc/apt/sources.list.d/* | sed -e /^$/d)
-    echo -e "Sources List:"
-    echo -e "$sources"
-    nl
-    if [ $(find /etc/apt/sources.list.d/ -type f 2> /dev/null | wc -l) -ne 0 ]
-    then  # prevent showing files that have commented out lines / empty
-        sourcesd=$(grep -v '#' /etc/apt/sources.list.d/* | sed -e /^$/d \
-         | sed 's/:deb/:\n  deb/')
-        echo -e "Sources List from SourcesD:"
-        echo -e "$sourcesd"
-        nl
-    fi
-}
-
 function GetOtherDetails()
 {
     # Gets Other General Details. Gets called once by Writer().
@@ -696,6 +740,7 @@ function GetOtherDetails()
     GetInstallMedia
     GetDistUpgradeDate
     nl
+    GetHweRange
     GetHweKernels
     CheckHwe
     CheckIfCertifiedHardwarePlatform
@@ -764,10 +809,36 @@ function GetDistUpgradeDate()
     fi
 }
 
+function GetHweRange() {
+    # Valid current choices for Release numbers LTS are: 18.04, 20.04
+    LSB_Rel=$(lsb_release -sr | cut -c 1-5)
+    case "$LSB_Rel" in
+        ("18.04")
+            LTS_PKG="18.04"
+            ;;
+        ("20.04")
+            LTS_PKG="20.04"
+            ;;
+        ("21.04")
+            LTS_PKG="20.04"
+            ;;
+        ("21.10")
+            LTS_PKG="20.04"
+            ;;
+        ("22.04")
+            LTS_PKG="22.04"
+        (*)
+            echo -e "Something went wrong. Error out of range."
+            exit 1
+    esac    
+
+}
+
 function GetHweKernels()
 {
     echo -e "These are the current kernel ranges for HWE kernels for this release."
-    show_kernels=$(apt-cache show linux-generic-hwe-$(lsb_release -sr) 2> /dev/null \
+
+    show_kernels=$(apt-cache show linux-generic-hwe-$LTS_PKG 2> /dev/null \
         | awk '/Depends:/ {print "For HWE Package: " $2 ", Kernel Version: " $4}' \
         | sed -e 's/..$//' -e 's/~.*//') 2> /dev/null 
     echo -e "   --- HWE Kernel Reference from 'apt-cache show':"
@@ -777,15 +848,15 @@ function GetHweKernels()
 
 function CheckHwe()
 {
-    return_status=$(dpkg -s linux-generic-hwe-$(lsb_release -sr) 2>&1 \
+    return_status=$(dpkg -s linux-generic-hwe-$LTS_PKG 2>&1 \
         | grep 'Status\|dpkg-query' )
     echo -e "   --- HWE Package Status from 'dpkg':"
         if [[ "$return_status" == *"Status:"* ]]
         then 
-            echo -e "Package linux-generic-hwe-$(lsb_release -sr) is installed."
+            echo -e "Package linux-generic-hwe-$LTS_PKG is installed."
         elif [[ "$return_status" == *"is not installed"* ]]
         then
-            echo -e "HWE package linux-generic-hwe-$(lsb_release -sr) was not detected. Please check "
+            echo -e "HWE package linux-generic-hwe-$LTS_PKG was not detected. Please check "
             echo -e "kernel version to verify range"
         fi
         nl
@@ -889,6 +960,10 @@ function Writer
     GetGraphicsEnv
     GetRepositories
     GetOtherDetails
+    if [[ "$less_status" != "less" ]]
+    then
+        ProcessMissingPrograms
+    fi
     ReportFooter
 }
 
@@ -1147,7 +1222,7 @@ Writer | sed 's/<filter>/[REMOVED]/g' > "$report"     # Writing to file
 echo "The result is stored in '$report'"
 ## Optional upload to pastebin paste.ubuntu.com
 Paster
-
+exit
 
 
 
