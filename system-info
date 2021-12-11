@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-02, Script Date: 2021.12.04"
+version="Version: 01.00-02, Script Date: 2021.12.06"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -220,8 +220,9 @@ function CheckPrerequisites()
                 # a useful option to see if there "is" a SecureBoot option in the BIOS, besides just what it is set at. This, during 
                 # tests, is safe to install on Legacy Only BIOS systems and can be used to tell if the BIOS is such.
                 echo -e "$faintvid \"${Program}\" Could not be found. This program is suggested.$resetvid" 
-                echo -e "$faintvid If this is older hardware that is 'Legacy Only BIOS', then this can be ignored.$resetvid"
-                echo -e "$faintvid The report will still run without it. It will just not be able to answer one question. $resetvid"
+                echo -e "$faintvid If this is older hardware that is 'Legacy Only BIOS', then this can be $resetvid"
+                echo -e "$faintvid ignored. The report will still run without it. It will just not be able $resetvid"
+                echo -e "$faintvid to answer one question. $resetvid"
                 check_mokutil=0;    # Set Flag to false and recheck in GetSb()
                 check_prog=0;
                 missing_programs="$missing_programs\n$Program"
@@ -229,7 +230,7 @@ function CheckPrerequisites()
             elif [[ "$Program" == "pastebinit" ]] || [[ "$Program" == "wget" ]] || [[ "$Program" == "curl" ]] || [[ "$Program" == "nc" ]]
                 then
                 check_prog=0;
-                check_paster=$($check_paster+1);
+                check_paster=$((check_paster+1));
                 missing_paster_progs="$missing_paster_progs$Program, "
                 missing_programs="$missing_programs\n$Program"
             else
@@ -247,11 +248,12 @@ function CheckPrerequisites()
         echo -e "The Script 'system-info' uses some very basic Linux utilities. "
         echo -e "Some of these utilities were not found."
         nl
-        echo -e "The report will still run without them. It will just not answer related questions."
-        echo -e "Some of that information may be related to the diagnosis of your installed system."
-        echo -e "If missing utilities may have answered your specified problem, you may "
-        echo -e "be asked by a 'Ubuntu Forums Member' supporting you if a program was missing, and "
-        echo -e "if you could install it to answer that related question."
+        echo -e "The report will still run without them. It will just not answer related "
+        echo -e "questions. Some of that information may be related to the diagnosis of "
+        echo -e "your installed system. If missing utilities may have answered your "
+        echo -e "specified problem, you may be asked by a 'Ubuntu Forums Member' supporting "
+        echo -e "you if a program was missing, and if you could install it to answer that "
+        echo -e "related question."
         nl
         CheckPaster
         echo -e "Some of these utilities are not default installed utilities to all Editions, "
@@ -267,7 +269,7 @@ function CheckPrerequisites()
             if [[ $ans =~ ^[Ee]$ ]]
             then
                 echo -e "Please install the missing programs listed above before rerunning script." 
-                exit
+                exit 1
             elif [[ ${ans,} =~ ^[Cc]$ ]]
             then
                 echo -e "Some task(s) will not work, but I'll do the best possible, continuing ..." 
@@ -510,7 +512,7 @@ function GetNetworkingInfo()
 function GetInternetStatus()
 {
     # Verifies ping status and relsolv. Called once by GetNetworkingInfo().
-    ping -c 1 www.google.com > /dev/null
+    ping -c 1 www.google.com &> /dev/null
     pingStatus=$?
     echo -e "  --- Internet Connection Status from 'ping [various addresses]' --- "
     if [ $pingStatus == 0 ]
@@ -518,9 +520,9 @@ function GetInternetStatus()
         echo -e "Connected to Internet with DNS"
     else 
         echo -e "Cannot reach internet by DNS"
-        ping -c 1 8.8.8.8 > /dev/null
+        ping -c 1 8.8.8.8 &> /dev/null
         pingStatus=$?
-        if pingStatus [ $pingStatus == 0 ]
+        if [ $pingStatus == 0 ]
         then
             echo -e "Can reach the internet without DNS"
         else
@@ -533,7 +535,7 @@ function GetInternetStatus()
 function GetPingStatus()
 {
     # Takes arg as IP or URL. Returns psuedo boolean $return_status. Called twice (by Paster() and GetInternetStatus()).
-    ping -c 1 $1 > /dev/null
+    ping -c 1 $1 &> /dev/null
     pingStatus=$?
     if [ $pingStatus == 0 ]
     then 
@@ -659,9 +661,14 @@ function GetGraphicsEnv()
     if [ $DESKTOP_SESSION ]
     then
         echo -e "The Current Desktop Session is: $DESKTOP_SESSION "
-        xmode=$(xrandr -q | egrep --color=never -e 'Screen' -e 'connected primary')
-        echo -e "The Current X Desktop Information Details from 'xrandr' are: "
-        echo -e "$xmode" 
+        xmode=$(xrandr -q &> /dev/null | egrep --color=never -e 'Screen' -e 'connected ')
+        if [ $? -eq 1 ]
+        then 
+            echo -e "'xrandr' could not determine resolution."
+        else
+            echo -e "The Current X Desktop Information Details from 'xrandr' are: "
+            echo -e "$xmode" 
+        fi
     else
         echo -e "The Current Desktop Session is: <Not Populated> " 
     fi
@@ -930,7 +937,23 @@ function MessageLess()
     echo -e "at the lower left of your screen,"
     echo -e "$blueback quit from 'less' to continue the script with the <q> key. $resetvid"
     nl
+    SensitiveDataWarning
  }
+ 
+function SensitiveDataWarning () {
+    echo -e "$redback --- SENSITIVE DATA WARNING --- $resetvid "
+    nl
+    echo -e "This Report is prepared in two versions- "
+    nl
+    echo -e "The 'Your Eyes Only' version, only exists temporarily in memory, and is "
+    echo -e "viewed onscreen by 'less'. The report that is viewed by 'less' onscreen "
+    echo -e "contains 'sensitive data' that should NOT be posted publically. "
+    nl
+    echo -e "The Final Report 'file' is saved to disk as a file. The Final Report is "
+    echo -e "sanitized, filtered, with the sensitive data removed. It is safe to post "
+    echo -e "online publically. "
+    nl
+}
  
 function ReportFooter()
 {
