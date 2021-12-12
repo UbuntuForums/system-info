@@ -661,14 +661,9 @@ function GetGraphicsEnv()
     if [ $DESKTOP_SESSION ]
     then
         echo -e "The Current Desktop Session is: $DESKTOP_SESSION "
-        xmode=$(xrandr -q &> /dev/null | egrep --color=never -e 'Screen' -e 'connected ')
-        if [ $? -eq 1 ]
-        then 
-            echo -e "'xrandr' could not determine resolution."
-        else
-            echo -e "The Current X Desktop Information Details from 'xrandr' are: "
-            echo -e "$xmode" 
-        fi
+        xmode=$(xrandr -q 2> /dev/null | egrep --color=never -e 'Screen' -e 'connected ')
+        echo -e "The Current X Desktop Information Details from 'xrandr' are: "
+        echo -e "$xmode" 
     else
         echo -e "The Current Desktop Session is: <Not Populated> " 
     fi
