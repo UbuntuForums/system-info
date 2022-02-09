@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-02, Script Date: 2021.12.06"
+version="Version: 01.00-03, Script Date: 2022.02.09"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
