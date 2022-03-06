@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-04, Script Date: 2022.02.24"
+version="Version: 01.00-05, Script Date: 2022.03.06"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -762,6 +762,9 @@ function GetOtherDetails()
     id -un
     id |tr ' ' '\n'|sed 's/,/, /g'| fold -sw 80 |sed 's/ //g'
     nl
+    GetLiveCD
+    GetWhere
+    GetCmdLine
 }
 
 function GetOriginalInstallDate()
@@ -911,10 +914,51 @@ function GetUserInstalled ()
     # that are presently marked as manually installed. (Those 'may' have been changed.)  
     comm -23 ManuallyInstalled.tmp DefaultInstalled.tmp > ./UserInstalled.tmp
     # Print the list in two columns
-    awk 'NF' ./UserInstalled.tmp | pr -2T  # You can remove the filter to pr on this to keep in a single column...
+    awk 'NF' ./UserInstalled.tmp | pr -2T  # You can remove the filter to pr on this to keep output in a single column...
     nl # Add newline in report
     # Remove the temporary files
     rm ./*.tmp
+}
+
+function GetLiveCD() {
+    livecd_test=""
+    boot_data=$(mount | grep " / " | grep 'squashfs')
+    if [ -z "$boot_data" ] 
+    then
+       livecd_test="an installed system."
+    else
+       livecd_test="a LiveCD."
+    fi
+    echo -e "The 'system-info' script was booted from $livecd_test"
+    nl
+}
+
+function GetWhere() {
+    ### For some reason these two assignments did not want to take, 
+    ###     so had to force a work-around. 
+    #ssh_data=$( w | grep " w" | grep --color=never " pts/" )
+    #ssh_data=`w | grep ' w' | grep --color=never ' pts/'`
+    
+    w | grep ' w' | grep --color=never ' pts/' > ./ssh_data.tmp
+    
+    if [ -z "$(awk '{print $0}' ./ssh_data.tmp)" ]
+    then
+        ssh_test="locally on the system"
+    else
+        ssh_test="remotely through an ssh connection."
+    fi
+    
+    rm ./ssh_data.tmp
+
+    echo -e "The 'system-info' script was run $ssh_test"
+    nl
+}
+
+function GetCmdLine() {
+    cmd_line=$(awk '{print $0}' /proc/cmdline)
+    echo -e "The Linux Kernel Command Line use to boot was: "
+    echo -e "$cmd_line"
+    nl
 }
 
 function AdjustForLessStatus()
