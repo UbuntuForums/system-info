@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-05, Script Date: 2022.03.06"
+version="Version: 01.00-06, Script Date: 2022.03.06"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -73,6 +73,12 @@ dbg_lvl=5
 # Trap Control-C
 stty -echoctl # hide ^C
 trap 'other_commands' SIGINT
+
+# 'Trap Section' to clean up Temporary Files on unexpected EXIT's
+Trap "rm -f $manually_installed" EXIT 2> /dev/null
+Trap "rm -f $default_installed" EXIT 2> /dev/null
+Trap "rm -f $user_installed" EXIT 2> /dev/null
+Trap "rm -f $ssh_data" EXIT 2> /dev/null
 
 ########################################################################
 #### Functions:
@@ -197,6 +203,7 @@ function CheckPrerequisites()
     	lsusb
     	sleep
     	sort
+    	mktemp
     	whoami
     	who'
 
@@ -710,7 +717,7 @@ function GetGraphicsEnv()
 
 function GetRepositories()
 {
-    # Gets Repository Information. Called once by Writer(). ** TODO Proposed
+    # Gets Repository Information. Called once by Writer().
     echo -e "${setansi}---------- Repository Information from '/etc/apt/sources.list and etc/apt/sources.list.d/':$ransi"
     nl
     sources=$(grep -v '#' /etc/apt/sources.list | sed -e /^$/d )
@@ -895,10 +902,13 @@ function CheckIfCertifiedHardwarePlatform()
 function GetUserInstalled ()
 {
     ## Get a list of User Installed Packages
+    manually_installed=$(mktemp /tmp/ManuallyInstalled-XXXXX)
+    default_installed=$(mktemp /tmp/DefaultInstalled-XXXXX)
+    user_installed=$(mktemp /tmp/UserInstalled-XXXXX)
     
     echo -e "   --- User Installed Package List:"
     # Use apt-mark to list all packages marked as manually installed. 
-    apt-mark showmanual | sort -u > ./ManuallyInstalled.tmp
+    apt-mark showmanual | sort -u > $manually_installed
     # Check to see if defualt installed list exists
     # for prebuilt system images, it does not exist
     if [ -f /var/log/installer/initial-status.gz ]
@@ -906,18 +916,20 @@ function GetUserInstalled ()
         # Get the list of default installed packages at initial installation.
         gzip -dc /var/log/installer/initial-status.gz 2> /dev/null | \
             sed -n 's/^Package: //p' | \
-            sort -u > ./DefaultInstalled.tmp
+            sort -u > $default_installed
     else 
-        touch ./DefaultInstalled.tmp
+        touch $default_installed
     fi
     # Use compare, to exclude those defaults that are unique, AND exclude defaults 
     # that are presently marked as manually installed. (Those 'may' have been changed.)  
-    comm -23 ManuallyInstalled.tmp DefaultInstalled.tmp > ./UserInstalled.tmp
+    comm -23 $manually_installed $default_installed > $user_installed
     # Print the list in two columns
-    awk 'NF' ./UserInstalled.tmp | pr -2T  # You can remove the filter to pr on this to keep output in a single column...
+    awk 'NF' $user_installed | pr -2T  # You can remove the pr filter on this to keep output in a single column...
     nl # Add newline in report
     # Remove the temporary files
-    rm ./*.tmp
+    rm -f $manually_installed
+    rm -f $default_installed
+    rm -f $user_installed
 }
 
 function GetLiveCD() {
@@ -934,22 +946,20 @@ function GetLiveCD() {
 }
 
 function GetWhere() {
-    ### For some reason these two assignments did not want to take, 
-    ###     so had to force a work-around. 
-    #ssh_data=$( w | grep " w" | grep --color=never " pts/" )
-    #ssh_data=`w | grep ' w' | grep --color=never ' pts/'`
-    
-    w | grep ' w' | grep --color=never ' pts/' > ./ssh_data.tmp
-    
-    if [ -z "$(awk '{print $0}' ./ssh_data.tmp)" ]
+    # Create temp file
+    ssh_data=$(mktemp /tmp/ssh_data-XXXXX)
+    # Redirect/Populate output to temp file
+    w | grep ' w' | grep --color=never ' pts/' > $ssh_data
+    # Ask question
+    if [ -z "$(awk '{print $0}' $ssh_data)" ]
     then
         ssh_test="locally on the system"
     else
         ssh_test="remotely through an ssh connection."
     fi
-    
-    rm ./ssh_data.tmp
-
+    # Remove temp file
+    rm -f $ssh_data
+    # Give answer
     echo -e "The 'system-info' script was run $ssh_test"
     nl
 }
