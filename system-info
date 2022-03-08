@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-06, Script Date: 2022.03.06"
+version="Version: 01.00-07, Script Date: 2022.03.07"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -59,6 +59,8 @@ LTS_PKG=""
 # variables to keep track of missing programs...
 missing_programs=""
 check_paster=0
+# Variable to track upload status as uploaded
+check_paste=1
 missing_paster_progs=""
 # Logger settings
 #     Change verbosity to show level of warnings. Range: -1 through 5. -1 is show nothing.
@@ -183,6 +185,7 @@ function CheckPrerequisites()
     	free
     	gsettings
     	gzip
+    	tar
     	md5sum
     	mokutil
     	curl
@@ -269,7 +272,7 @@ function CheckPrerequisites()
         nl
        
         ans=
-        while [ "$ans" != "e" ] && [ "$ans" != "c" ]
+        while [ "$ans" != "e" ] && [ "$ans" != "E" ] && [ "$ans" != "c" ] && [ "$ans" != "C" ]
         do
             read -erp "<E>xit and install the program(s) or <C>ontinue anyway? <E/C> " ans 
             ans="${ans,}" 
@@ -621,6 +624,7 @@ function GetFQDN()
 function GetDiskInfo()
 {
     # Gets filesystem, disk, fstab and moutn information. Called once by Writer().
+    GetStorageControllers
     echo -e "${setansi}---------- File system specs from 'df -h':$ransi"
     df -hT -x tmpfs -x devtmpfs | grep -v '/snap/'
     nl
@@ -638,6 +642,32 @@ function GetDiskInfo()
     echo -e "${setansi}---------- Current Mount Details of 'mount':$ransi"
     mount | grep '^/dev' | sort
     nl
+}
+
+function GetStorageControllers() {
+    # Based on this information: 
+    #     lspci | grep --color=never -i -e 'IDE controller' -e 'SATA controller' -e 'SCSI controller' -e 'Non-Volatile memory controller' -e 'RAID Controller'
+    echo -e "${setansi}---------- Storage Controller Information From 'lspci':$ransi"
+    cntrllr_busid_list=$(lspci | grep --color=never -i -e 'IDE controller' \
+        -e 'SATA controller' \
+        -e 'SCSI controller' \
+        -e 'Non-Volatile memory controller' \
+        -e 'RAID Controller' | \
+        awk '{print $1}')
+    # Modified for devices which have no formal storage controllers besides USB or SD
+    if [ ! -z "$cntrllr_busid_list" ]
+    then
+        # Parse through list )array) and show detailed information on each
+        for controller in "${cntrllr_busid_list}"
+        do
+            sudo lspci -s $controller -vv
+            nl
+        done
+    else
+        echo -e "No storage controller found. Check in 'lsusb' section."
+        echo -e "May be USB or SD storage."
+        nl
+    fi
 }
 
 function GetGraphicsEnv() 
@@ -708,8 +738,8 @@ function GetGraphicsEnv()
     else
         echo -e "The Current Desktop Theme: Is not set,this is Console Based." 
     fi   
-    virt_ttys=$(ps -e | awk '$2 ~ /^tty/ && $2 !~ /^ttyS/ {print "\t" $2 "\t" $4}')
-    echo -e "The Current Virtual TTYs being used are:" 
+    virt_ttys=$(ps -e | awk '$2 ~ /^tty/ || $2 ~ /^ttyS/ || $2 ~ /^pts/ {print "\t" $2 "\t" $4}')
+    echo -e "The Current Virtual TTY's being used are:" 
     echo -e "\tTTY#\tUsed By" 
     echo -e "$virt_ttys" 
     nl
@@ -1056,6 +1086,78 @@ function nl()
     echo -e ""
 }
 
+function Pause()
+{
+    read -n 1 -s -r -p "Press any key to continue"
+    nl
+}
+
+function ArchiveReport() {
+    #Check if uploaded (successfully)...
+    # $check-paste is 1 at start (not uploaed), 0 if upload was successful.
+    uploaded=$check_paste
+    if [ $uploaded -eq 1 ] 
+    then
+        # Check size of report file, must be less than 19.5kB
+        report_size=$(wc -c $report | awk '{print $1}')
+        if [ $report_size -ge 19500 ]
+        then 
+            echo -e "'$sname.txt' is larger than 19.5kB. ($report_size bytes)"
+            nl
+            echo -e "If you want to attach to a post on Ubuntu Forums as an attachment, "
+            echo -e "you will need to compress the report."
+            nl
+            # Prompt User       
+            ans=
+            while [ "$ans" != "y" ] && [ "$ans" != "Y" ] && [ "$ans" != "n" ] && [ "$ans" != "N" ]
+            do
+                read -erp "Would you like to archive the report? <y/N> " ans 
+                ans="${ans,}" 
+                debug "User answered $ans" 1
+                if [[ $ans =~ ^[Yy]$ ]]
+                then
+                    echo -e "Compressing '$sname.txt' to archive file '$HOME/$sname.tar.gz'."
+                    nl
+                    # Remove old archive file, if present
+                    if [ -f $HOME/$sname.tar.gz ]
+                    then 
+                        rm -f  $HOME/$sname.tar.gz
+                    fi
+                    cwd=$(pwd)    # Save current directory
+                    cd $HOME
+                    # Create Archive without any parent direcetories
+                    tar -czvf $sname.tar.gz $sname.txt
+                    exit_code=$?
+                    # Check if archive was created successfully (catch exit code)
+                    if [ $exit_code -eq 0 ]
+                    then 
+                        echo -e "Archive file can be found at '$HOME/$sname.tar.gz'."
+                        nl
+                        Pause
+                    else
+                        echo -e "$sname.txt was not compressed. Archive file not created."
+                        nl
+                        Pause
+                        exit 1
+                    fi
+                    cd $cwd
+                elif [[ ${ans,} =~ ^[Nn]$ ]]
+                then
+                    if [ $verbosity -eq 5 ]
+                    then 
+                       debug "Continuing without creating archive file..." 
+                       Sleep 1
+                    fi
+                fi
+            done
+        else
+            echo "Report 'size' check complete. ($report_size bytes)"
+            nl
+            sleep 1
+        fi
+    fi
+}
+
 function Writer 
 {
     # Report template. Called twice by Main().
@@ -1331,6 +1433,7 @@ Writer | sed 's/<filter>/[REMOVED]/g' > "$report"     # Writing to file
 echo "The result is stored in '$report'"
 ## Optional upload to pastebin paste.ubuntu.com
 Paster
+ArchiveReport
 exit
 
 
@@ -1342,5 +1445,7 @@ exit
 #
 # Recheck all messages and prompts for spelling errors
 #
-# Add comments as script doucmentation:
+# Add comments as script documentation:
 #   - Document logic flow
+#
+# Possibly add more for LVM, ZFS, mdadm, and LUKS information(?)
