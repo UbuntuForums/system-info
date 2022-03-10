@@ -774,7 +774,1458 @@ function GetRepositories()
             fi
         done
         nl
+    fi#!/bin/bash
+
+## MAFoElffen, <mafoelffen@ubuntu.com>, 2021.08.19
+## 
+## Contributers:
+##     sudodus <nio.wiklund@gmail.com>, 2021.08.25
+##     Doug S,  2021.08.22
+##     oldfred, 2021.08.20
+## Filename: support-info
+## Description: Report Finds Machine System And Hardware Related Information.
+## Purpose:     For support use at "UbuntuForums.org".
+#########################################################################
+#  Copyright (c) 2012, 2021
+#
+#  GNU General Public License (GPL-3.0-or-later)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+
+########################################################################
+#### Variables
+########################################################################
+# Versioning
+version="Version: 01.00-08, Script Date: 2022.03.10"
+#md5_sum=$(md5sum $sname | sed 's/system.*//g' )
+arg1=$1
+arg2=$2
+# Set Report filename and path to
+sname="${0##*/}"   # flexible, needs quoting everywhere if spaces
+report="$HOME/${sname}.txt"
+# Set locale language settings
+LANG=C
+# Set a pretty ANSI screen decoration for displaying the report onscreen
+blueback="\0033[1;37;44m"
+redback="\0033[1;37;41m"
+faintvid="\0033[2m"
+resetvid="\0033[0m"
+# Check boot mode
+boot_mode=$( [ -d /sys/firmware/efi ] && echo "UEFI Firmware mode" || echo "Legacy mode (alias CSM alias BIOS mode)" )
+boot_status=$( [ -d /sys/firmware/efi ] );    # Use boot mode as boolean test
+less_status="less"
+up_status= "true"
+# Report timestamp
+startt="$(date '+%F  %T %Z (%z)')"
+# LST Name for package calc
+LTS_PKG=""
+# variables to keep track of missing programs...
+missing_programs=""
+check_paster=0
+# Variable to track upload status as uploaded
+check_paste=1
+missing_paster_progs=""
+# Logger settings
+#     Change verbosity to show level of warnings. Range: -1 through 5. -1 is show nothing.
+verbosity=-1
+silent_lvl=0
+crt_lvl=1
+err_lvl=2
+wrn_lvl=3
+inf_lvl=4
+dbg_lvl=5
+
+# Trap Control-C
+stty -echoctl # hide ^C
+trap 'other_commands' SIGINT
+
+# 'Trap Section' to clean up Temporary Files on unexpected EXIT's
+Trap "rm -f $manually_installed" EXIT 2> /dev/null
+Trap "rm -f $default_installed" EXIT 2> /dev/null
+Trap "rm -f $user_installed" EXIT 2> /dev/null
+Trap "rm -f $ssh_data" EXIT 2> /dev/null
+
+########################################################################
+#### Functions:
+########################################################################
+function other_commands()
+{
+    tput setaf 1
+    printf "You can 'not' exit this script by pressing Control-C..."
+    tput sgr0
+    printf "Continue with last 'asked' input..."
+}
+
+function CheckRoot()
+{
+    clear -x;
+    ## Check if ran as root. Runs at startup. Called by Main()
+    if [[ "$EUID" == 0 ]]
+    then 
+        echo -e "$redback Do not run this script with sudo or as root$resetvid"
+        exit
+    else
+        echo -e "This script needs some parts of it to run with elevated permissions."
+        echo -e "Please enter your password for that to happen."
+        sudo -k # revoke previously cached sudo password 
+        if sudo true
+        then 
+            echo "Running Script: ${sname} $version"
+        else 
+            echo "Password was incorrect for sudo elevated rights. Exiting Script."
+            exit 1
+        fi
     fi
+}
+
+function CheckArgs()
+{
+    # Version or Help Panel. Called by Main().
+    if [[ "$arg1" == "-v" ]]
+    then
+        # Versioning: At the commandline: [<ScriptName> -v] returns <VersionInfo>, then exits. 
+        echo -e "$version";
+        exit;
+    elif [[ "$arg1" == "-h" ]] || [[ "$arg1" == "--help" ]]
+    then
+        # Help Panel: At the commandline: [<ScriptName> -h or --help] returns this usage panel, then exits. 
+        echo "Running Script: ${sname} $version"
+        echo -e "md5sum: "$(md5sum $sname | sed 's/system.*//g' )
+        nl
+        echo -e "Description: The Ubuntu Forums \"system-info\" script queries the users "
+        echo -e "computer and prepares a report, so that Ubuntu Forums Community Members "
+        echo -e "can see what they are recommending solutions for."
+        nl
+        echo -e "Usage:    ./${sname} <option> "
+        nl
+        echo -e "Options: "
+        echo -e "    -v              Returns Version Information and exits."
+        echo -e "    -h or --help    Displays this Help Screen, then exits."
+        echo -e "    -s # or --show  #  Changes Verbosity levels of the logger."
+        echo -e "        # range 0 through 5"
+        echo -e "        Example: system-info -s 5  turns on debugging messages"
+        nl
+        echo -e "Parts of the script need elevated permissions (sudo) to get the correct " 
+        echo -e "information from your system, while other parts do not. We have "
+        echo -e "determined where that needs to be used and when not. While the script is "
+        echo -e "running, you will be asked to enter your userID's password."
+        nl
+        echo -e "It then asks the user 2 questions to describe the problem they are having, "
+        echo -e "then creates $sname.txt in their Home directory."
+        nl
+        echo -e "Will check programs used by this script, and give the user the option to "
+        echo -e "quit to install anything it finds missing. Will give the user the option "
+        echo -e "to upload the report to a pastebin and displays the URL of that to add "
+        echo -e "their post on Ubuntu Forums."
+        nl
+        echo -e "Or they can manually paste the report within code tags in a post or to a "
+        echo -e "pastebin. Or added as a text attachment to a post."
+        nl
+        echo -e "We have tried to keep this safe and simple to use."
+        exit;
+    elif [[ "$arg1" == "-s" ]] || [[ "$arg1" == "--show" ]]
+    then
+        if [ $arg2 -ge -1 ] && [ $arg2 -le 5 ]
+        then 
+            verbosity=$arg2
+        else
+            echo -e "Option out of range."
+            exit 1;
+        fi
+    fi
+}
+
+function CheckPrerequisites()   
+{
+    ## Check if all necessary programs are available. Called once by Main().
+    # Programs that are in /bin or /usr/bin.
+    Programs='
+        sudo
+    	cat
+    	grep
+    	egrep
+    	awk
+    	free
+    	gsettings
+    	gzip
+    	tar
+    	md5sum
+    	mokutil
+    	curl
+    	pastebinit
+    	ubuntu-drivers
+    	comm
+    	dpkg
+    	nc
+    	wget
+    	ls
+    	rm
+    	sed
+    	ping
+    	id
+    	ip
+    	hostname
+    	lsblk
+    	lsusb
+    	sleep
+    	sort
+    	mktemp
+    	whoami
+    	who'
+
+    # Programs that are in /usr/sbin or /sbin.
+    Programs_SBIN='fdisk
+    	lshw'
+
+    check_prog=1;
+    check_mokutil=1;
+
+    for Program in ${Programs} ${Programs_SBIN} 
+    do
+        if [ $(type ${Program} > /dev/null 2>&1 ; echo $?) -ne 0 ]
+        then
+            if [[ "$check_prog" == "1" ]]
+            then
+                echo -e " --- Some Programs This Script Uses Were Missing --- "
+            fi
+            if [[ "$Program" == "mokutil" ]]
+            then    # If not 'Here' condition
+                # If this missing, it is a variant for UEFI systems only. It does work on 18.04 where it was not default yet, and is 
+                # a useful option to see if there "is" a SecureBoot option in the BIOS, besides just what it is set at. This, during 
+                # tests, is safe to install on Legacy Only BIOS systems and can be used to tell if the BIOS is such.
+                echo -e "$faintvid \"${Program}\" Could not be found. This program is suggested.$resetvid" 
+                echo -e "$faintvid If this is older hardware that is 'Legacy Only BIOS', then this can be $resetvid"
+                echo -e "$faintvid ignored. The report will still run without it. It will just not be able $resetvid"
+                echo -e "$faintvid to answer one question. $resetvid"
+                check_mokutil=0;    # Set Flag to false and recheck in GetSb()
+                check_prog=0;
+                missing_programs="$missing_programs\n$Program"
+                debug "'$Program' is not installed" 1
+            elif [[ "$Program" == "pastebinit" ]] || [[ "$Program" == "wget" ]] || [[ "$Program" == "curl" ]] || [[ "$Program" == "nc" ]]
+                then
+                check_prog=0;
+                check_paster=$((check_paster+1));
+                missing_paster_progs="$missing_paster_progs$Program, "
+                missing_programs="$missing_programs\n$Program"
+            else
+                echo -e "'$Program' is not installed."
+                check_prog=0;
+                missing_programs="$missing_programs\n$Program"
+            fi
+        fi
+    done
+    
+    if [ "$check_prog" == 0 ]
+    then
+        echo -e " -------------------------------- "
+        nl
+        echo -e "The Script 'system-info' uses some very basic Linux utilities. "
+        echo -e "Some of these utilities were not found."
+        nl
+        echo -e "The report will still run without them. It will just not answer related "
+        echo -e "questions. Some of that information may be related to the diagnosis of "
+        echo -e "your installed system. If missing utilities may have answered your "
+        echo -e "specified problem, you may be asked by a 'Ubuntu Forums Member' supporting "
+        echo -e "you if a program was missing, and if you could install it to answer that "
+        echo -e "related question."
+        nl
+        CheckPaster
+        echo -e "Some of these utilities are not default installed utilities to all Editions, "
+        echo -e "versions, and flavors of Ubuntu... So may be considered as optional. "
+        nl
+       
+        ans=
+        while [ "$ans" != "e" ] && [ "$ans" != "E" ] && [ "$ans" != "c" ] && [ "$ans" != "C" ]
+        do
+            read -erp "<E>xit and install the program(s) or <C>ontinue anyway? <E/C> " ans 
+            ans="${ans,}" 
+            debug "User answered $ans" 1
+            if [[ $ans =~ ^[Ee]$ ]]
+            then
+                echo -e "Please install the missing programs listed above before rerunning script." 
+                exit 1
+            elif [[ ${ans,} =~ ^[Cc]$ ]]
+            then
+                echo -e "Some task(s) will not work, but I'll do the best possible, continuing ..." 
+                sleep 1
+            fi
+        done
+    else
+        echo -e "All required programs installed..."
+        sleep 1
+    fi
+}
+
+function CheckPaster() {
+    if [ $check_paster -eq 4 ]
+    then
+        echo -e "Programs 'pastebinit', 'curl', 'wget', and 'nc' are missing. "
+        echo -e "All 4 utilities used to upload this report to a PasteBin are missing."
+        echo -e "The report will still run. If not installed, you would just need to "
+        echo -e "paste the report into a post, contained within 'CODE' Tags."
+        nl
+    fi
+    if [ $check_paster -le 3 -a $check_paster -ge 1 ]
+    then
+        echo -e "Program(s) $missing_paster_progs is/are missing, "
+        echo -e "but can be ignored as there still are installed utilities present to "
+        echo -e "to be able to upload the report to an online PasteBin."
+        nl
+    fi  
+}
+
+function ProcessMissingPrograms() {
+    echo -e "---- Required Programs For Report."
+    if [[ "$missing_programs" == "" ]]
+    then
+        echo -e "    All required programs installed for report. "
+        nl
+    else
+        echo -e "    --- Some Programs This Script Uses Were Missing --- "
+        echo -e "$missing_programs" | awk 'NF && !/^(start|#)/ {print "    " $0}'
+        nl
+    fi
+}
+
+function RmOldReport()  
+{
+    # Removes the old report. Called once by Main().
+    /bin/rm -f "$report"
+}
+
+function UserInput()
+{
+    # Gather User Information on the problem. Called once by Main()
+    # User Input for Problem and Description
+    width=$(tput cols)
+    str=;for ((i=1;i<=$width;i++));do str="${str}_";done
+    echo -e "$str"
+    nl
+    echo -e "Please provide some \"Basic Information\"..."
+    read -erp "What is the Main Complaint (summarized)? " main_complaint
+    read -erp "Describe the Problem: " problem_description
+    clear -x
+}
+
+function GetMachineInfo()
+{
+    # Gets Computer Information. Called once by Writer().
+    GetCPU
+    GetDmi
+    GetMem
+    GetNetworkingInfo
+    GetFQDN
+    nl 
+}
+
+function GetCPU()
+{
+    # Gets CPU Information. Called once by GetMachineInfo().
+    echo -e "${setansi}---------- General Computer Specifications:$ransi"
+    nl
+    echo -e "  --- Computer/CPU Information from 'lshw -C cpu' --- "
+    $lshw_cmd -C cpu \
+        | sed -r '/^  *([a-z])/ s/([a-zA-Z])/\u&/' \
+        | sed -e 's/^ *\*-cpu/\*-Cpu/g' \
+        | sed '/Capabilities/ s/ *Capabilities/  Capabilities/' \
+        | fold -sw 71 \
+        |sed -e 's/^[^ ]/           &/' \
+        -e 's/ *\*-Cpu/\*-Cpu/g' \
+        -e 's/ Capabilities/   Capabilities/' \
+        -e 's/       /    /' \
+        -e '/Capabilities/ s/^[^ ]/          &/'
+    nl
+    $lshw_cmd \
+        | sed '/*-core/,$ d' \
+        | sed -r '/^  *([a-z])/ s/([a-zA-Z])/\u&/' \
+        | sed -e 's/ *Configuration/ Configuration/' \
+        -e '/Configuration/ s/ [^ ]*=[^ ]*/\n&/g' \
+        -e 's/Configuration/   Configuration/' \
+        | sed 's/^ [^ ]/       &/'
+    nl
+}
+
+function GetDmi()
+{
+    # Checks for SMBIOS compliance and values for. Called once by GetMachineInfo().
+    # Dynamically checks the dmi_var's and removes them from the array if not present
+    #     to adjust for SMBIOS Standard Version variations.
+    smbios_compliant="/sys/class/dmi/id/"
+
+    dmi_vars='bios_vendor
+		bios_version
+		bios_release
+		board_vendor
+		board_name
+		board_version
+		board_serial
+		board_asset_tag'
+
+    echo -e "------------------ SMBIOS Information from '/sys/class/dmi/id/' "
+    
+    if [ -d $smbios_compliant ]
+    then
+        # Loop through once to verify all the vdi_var files exist first. If not, 
+        #    then modify list by removing the file name from the declared array.
+        dmi_idx=0
+        for dmi_var in ${dmi_vars}
+        do
+            if [ ! -f $smbios_compliant$dmi_var ]
+            then
+                debug "Deleting $dmi_var from array..." 1
+                dmi_vars=( "${dmi_vars[@]/$dmi_var}" )
+            fi
+            dmi_idx+=1
+        done
+        
+        # Then spin through the modified array to list them
+        for dmi_var in ${dmi_vars}
+        do
+            content=$(sudo head -n 1 $smbios_compliant$dmi_var)
+            title=$(echo $dmi_var | sed -e 's/_/ /g' | sed -e 's/\b\(.\)/\u\1/g' ) 
+            if [ $dmi_var == "board_version" ]
+            then
+            
+                if [[ "$content" == "1234567890" ]]
+                then
+                    content=""
+                fi
+            elif [[ "$content" == *"default "* ]]
+            then
+                content="Value Not Set"
+            fi
+            printf "%-20s %s\n" "$title:" "$content";
+        done
+    else
+        echo -e "No SMBIOS information found"
+    fi
+    nl
+    printf "%-20s %s\n" "Current boot mode:" "$boot_mode"
+    GetSb
+    nl
+}
+
+function GetSb()
+{
+    # Gets SafeBoot Info from UEFI BIOS or if not UEFI capable. Called once by GetDMI().
+    # Warns user if mokutil was not present.
+    #echo -e "   --- SecureBoot Status from 'mokutil --sb-state':"
+    if [ $check_mokutil -eq 0 ] 
+    then
+        echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
+        echo -e "\tand checks if the system BIOS was UEFI or Lagacy only BIOS, "
+        echo -e "\tbut package mokutil was not installed. If you would like to check"
+        echo -e "\tthis information, please install 'mokutil' and rerun script."
+    else
+        # For Legacy only BIOS, returns error: "EFI variables are not supported on this system"
+        error_mokutil=$(mokutil --sb-state 2>&1 )
+        if [[  "$error_mokutil" == *"EFI variables"*  ]]
+        then
+            echo -e "$error_mokutil"
+        elif [[  "$error_mokutil" == *"Command 'mokutil' not found"*  ]] #
+            then 
+                echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
+                echo -e "\t and checks if the system BIOS was UEFI or Lagacy only BIOS, "
+                echo -e "\tbut package mokutil was not installed. If you would like to check"
+                echo -e "\tthis information, please install 'mokutil' and rerun script."                
+        else
+            sb_state=$(mokutil --sb-state 2>&1 )
+            debug "sb_state: $sb_state" 1
+            if [[ $sb_state == "Failed to read SecureBoot" ]]
+            then
+                sb_disabled="SecureBoot: Disabled"
+                #printf "%-20s %s\n" ${sb_disabled/ /: }
+                echo -e "$sb_disabled"
+            else
+                # These are the three known messages returned from UEFI
+                # This system doesn't support Secure Boot
+                # Secure Boot is enabled
+                # Failed to read SecureBoot
+                #printf "%-20s %s\n" ${sb_state/ /: }
+                echo -e "$sb_state"
+            fi
+        fi
+        nl
+    fi
+}
+
+function GetMem()
+{
+    # Gets memory information (pysical and swap). Called once by GetMachineInfo().
+    echo -e "${setansi}---------- Memory Information:$ransi"
+    mem_stats=$(free -h)
+    echo -e "$mem_stats"
+    nl
+}
+
+function GetUsb()
+{
+    # Gets USB information. Called once by Writer().
+    echo -e "${setansi}---------- USB Information from 'lsusb -t -v':$ransi"
+    usb_info=$(lsusb -t -v)
+    echo -e "$usb_info"
+    nl
+}
+
+function GetNetworkingInfo()
+{
+    # Gets Networking related Information. Called once by GetMachineInfo().
+    GetIP
+    CheckIpUp silent
+    if [ "$up_status" == "true" ]
+    then
+        GetInternetStatus
+    else
+        echo -e "  --- Internet Connection Status from 'ip addr' --- "
+        echo -e "Skipped getting Internet Status. Connection: $up_status"
+        nl
+    fi
+    CheckIpUp show
+}
+
+function GetInternetStatus()
+{
+    # Verifies ping status and relsolv. Called once by GetNetworkingInfo().
+    ping -c 1 www.google.com &> /dev/null
+    pingStatus=$?
+    echo -e "  --- Internet Connection Status from 'ping [various addresses]' --- "
+    if [ $pingStatus == 0 ]
+    then 
+        echo -e "Connected to Internet with DNS"
+    else 
+        echo -e "Cannot reach internet by DNS"
+        ping -c 1 8.8.8.8 &> /dev/null
+        pingStatus=$?
+        if [ $pingStatus == 0 ]
+        then
+            echo -e "Can reach the internet without DNS"
+        else
+            echo -e "Cannot reach internet by IP..."
+        fi
+    fi    
+    nl
+}
+
+function GetPingStatus()
+{
+    # Takes arg as IP or URL. Returns psuedo boolean $return_status. Called twice (by Paster() and GetInternetStatus()).
+    ping -c 1 $1 &> /dev/null
+    pingStatus=$?
+    if [ $pingStatus == 0 ]
+    then 
+        return_status="true"
+    else 
+        return_status="false"
+    fi    
+}
+
+function GetIP()
+{
+    # Get IP related information. Called once by GetNetworkingInfo().
+    echo -e "${setansi}---------- IP Address Information:$ransi"
+    echo -e "  --- IP Address Information from 'ip addr' --- "
+    # Grab IP address information
+    if [ "$less_status" == "less" ]
+    then
+        ip_addr=$(ip addr | grep -e '^[[:space:][1-9]:' -e 'inet.')
+        echo -e "$ip_addr"
+    else
+        ip_addr=$(ip addr | grep -e '^[[:space:][1-9]:' -e 'inet.' \
+            | sed '/inet\s/ s/inet\s.*/inet [REMOVED]/g' \
+            | sed '/inet6\s.*/ s/inet6\s.*/inet6 [REMOVED]/g')
+        echo -e "$ip_addr"
+    fi
+    nl
+}
+
+function CheckIpUp()
+{
+    # Check to see if an exposed network device is up before going out to LAN. Called twice by GetNetworkingInfo()
+    show_silent=$1        # show or silent. Eval is on: "show"
+    ip_devices_up=$(ip addr | grep -e '^[[:space:][1-9]:.*UP,LOWER_UP' | sed 's/.*virb.*:.*\|.*lo:.*LOOPBACK.*//g' | sed -e /^$/d)
+    if [ "$show_silent" == "show" ]
+    then
+        echo -e "  --- Network Device Status Summary from 'ip addr' ---  "
+        if [ "$ip_devices_up" == "" ]
+        then
+            echo -e "No Network Devices up..."
+            nl
+            up_status="false"
+        else
+            echo -e "These Network Devices are up:"
+            echo -e "$ip_devices_up"
+            nl
+            up_status="true"
+        fi
+    elif [ "$show_silent" == "silent" ]
+    then
+        if [ "$ip_devices_up" == "" ]
+        then
+            up_status="false"
+        else
+            up_status="true"
+        fi
+    else
+        debug -e "'show_silent' call out of range $show_silent" 1
+    fi
+}
+
+function GetFQDN()
+{
+    # Gets Hostname information. Called once by GetMachineInfo().
+    echo -e "  --- Hostname from 'hostname --fqdn' ---  "
+    if [ "$less_status" == "less" ]
+    then
+        host_name=$(hostname --fqdn)
+    else
+        host_name=$(hostname | sed 's/\..*//g')
+    fi
+    echo -e "The 'Hostname' of the computer system is: $host_name"
+    nl
+}
+
+function GetDiskInfo()
+{
+    # Gets filesystem, disk, fstab and moutn information. Called once by Writer().
+    GetStorageControllers
+    echo -e "${setansi}---------- File system specs from 'df -h':$ransi"
+    df -hT -x tmpfs -x devtmpfs | grep -v '/snap/'
+    nl
+    echo -e "${setansi}---------- Disk/Partition Information From 'fdisk':$ransi"
+    sudo fdisk -l 2>&1 | sed '/\/dev\/loop/,+3 d' 2> /dev/null | uniq
+    nl
+    echo -e "${setansi}---------- Disk/Partition Information From 'lsblk':$ransi"
+    lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT,MODEL | grep -v '/snap/'
+    echo -e "   ------- 'lsblk' information continued ..."
+    lsblk -o NAME,HOTPLUG,PARTUUID,UUID | grep -v 'loop'
+    nl
+    echo -e "${setansi}---------- Mount Details of '/etc/fstab':$ransi"
+    egrep -v '#' /etc/fstab
+    nl
+    echo -e "${setansi}---------- Current Mount Details of 'mount':$ransi"
+    mount | grep '^/dev' | sort
+    nl
+}
+
+function GetStorageControllers() {
+    # Based on this information: 
+    #     lspci | grep --color=never -i -e 'IDE controller' -e 'SATA controller' -e 'SCSI controller' -e 'Non-Volatile memory controller' -e 'RAID Controller'
+    echo -e "${setansi}---------- Storage Controller Information From 'lspci':$ransi"
+    cntrllr_busid_list=$(lspci | grep --color=never -i -e 'IDE controller' \
+        -e 'SATA controller' \
+        -e 'SCSI controller' \
+        -e 'Non-Volatile memory controller' \
+        -e 'RAID Controller' | \
+        awk '{print $1}')
+    # Modified for devices which have no formal storage controllers besides USB or SD
+    if [ ! -z "$cntrllr_busid_list" ]
+    then
+        # Parse through list )array) and show detailed information on each
+        for controller in "${cntrllr_busid_list}"
+        do
+            sudo lspci -s $controller -vv
+            nl
+        done
+    else
+        echo -e "No storage controller found. Check in 'lsusb' section."
+        echo -e "May be USB or SD storage."
+        nl
+    fi
+}
+
+function GetGraphicsEnv() 
+{
+    # Gets Graphics Layer Information. Called once by Writer().
+    echo -e "${setansi}---------- Video Details from 'lshw':$ransi"
+    nl
+    #lshw_data=$(sudo lshw -C video )
+    lshw_data=$(sudo lshw -C video \
+        | sed -e 's/ *resources/resources/' \
+        -e '/resources/ s/ [^ ]*:[^ ]*/ \n&/g' \
+        -e 's/resources:/       resources:/g' \
+        | sed 's/^ [^ ]/          &/' )
+    
+    if [ "$lshw_data" == "" ]
+    then
+        echo -e "No conventional GPU detected. May be using a Frame Buffer."
+    else
+        echo -e "$lshw_data"
+    fi
+    nl
+    echo -e "   --- Graphics Environment Continued from 'various graphics ENVs' ----" 
+    if [ $XDG_CURRENT_DESKTOP ] 
+    then 
+        echo -e "The Current Configured Destop is: $XDG_CURRENT_DESKTOP " 
+    else
+        echo -e "The Current Configured Desktop is: <Not Populated> " 
+    fi
+    if [ $DESKTOP_SESSION ]
+    then
+        echo -e "The Current Desktop Session is: $DESKTOP_SESSION "
+        xmode=$(xrandr -q 2> /dev/null | egrep --color=never -e 'Screen' -e 'connected ')
+        echo -e "The Current X Desktop Information Details from 'xrandr' are: "
+        echo -e "$xmode" 
+    else
+        echo -e "The Current Desktop Session is: <Not Populated> " 
+    fi
+    if [ $XDG_SESSION_TYPE ]
+    then
+        echo -e "The Current Session Type is: $XDG_SESSION_TYPE " 
+    else
+        session_type=$(ps -e | egrep -e 'tty' | egrep -e 'x11|Xorg|wayland' | awk '{print $4}')
+        if [ $session_type ]
+        then
+            echo -e "The Current Session Type is: $session_type " 
+        else
+            echo -e "The Current Session Type is: <No Graphics Session Type Loaded> " 
+        fi
+    fi
+    if [ -f /etc/X11/default-display-manager ]
+    then
+        display_manager=$(egrep /usr/sbin/ /etc/X11/default-display-manager | sed 's/\/usr\/sbin\///g')
+        echo "The Current Display Manager is: $display_manager" 
+    else
+        echo "The Current Display Manager is: <Not Configured>" 
+    fi
+    # This change is to adapt to Server Edition, which for some reason, can have a gsettings setting.
+    get_console_desktop=$([ -d /usr/share/xsessions/ ] && echo "Desktop" || echo "Console")
+    if [ "$get_console_desktop" == "Desktop" ]
+    then
+        desktop_theme=$(gsettings get org.gnome.desktop.interface gtk-theme)
+        if [ $desktop_theme ]
+        then
+            echo -e "The Current Desktop Theme: $desktop_theme" 
+        else
+            echo -e "The Current Desktop Theme: <None Configured>" 
+        fi 
+    else
+        echo -e "The Current Desktop Theme: Is not set,this is Console Based." 
+    fi   
+    virt_ttys=$(ps -e | awk '$2 ~ /^tty/ || $2 ~ /^ttyS/ || $2 ~ /^pts/ {print "\t" $2 "\t" $4}')
+    echo -e "The Current Virtual TTY's being used are:" 
+    echo -e "\tTTY#\tUsed By" 
+    echo -e "$virt_ttys" 
+    nl
+}
+
+function GetRepositories()
+{
+    # Gets Repository Information. Called once by Writer().
+    echo -e "${setansi}---------- Repository Information from '/etc/apt/sources.list and etc/apt/sources.list.d/':$ransi"
+    nl
+    sources=$(grep -v '#' /etc/apt/sources.list | sed -e /^$/d )
+    # sourcesd=$(grep -v '#' /etc/apt/sources.list.d/* | sed -e /^$/d)
+    echo -e "Sources List:"
+    echo -e "$sources"
+    nl
+    file_path="/etc/apt/sources.list.d/"
+    if [ $(find $file_path -type f 2> /dev/null | wc -l) -ne 0 ] 
+    then  
+        echo -e "Sources List from SourcesD:"
+        sourcesd_files=$(find $file_path -type f 2> /dev/null )
+        for list_file in $sourcesd_files
+        do
+            lines=$(grep -v '#' $list_file | sed -e /^$/d )
+            #line_count=$( wc -l <<< "$lines" )
+            if [ "$lines" != "" ]
+            then
+                echo -e "$list_file:"
+                echo -e "$lines"
+            else
+                echo -e "$list_file:"
+                echo -e "File had no entries."
+            fi
+        done
+        nl
+    fi
+}
+
+function GetOtherDetails()
+{
+    # Gets Other General Details. Gets called once by Writer().
+    echo -e "${setansi}---------- Other Details from 'Various':$ransi"
+    echo -e "The current kernel version is:      ${setansi} $(uname -r) $ransi"
+    echo -e "The current release description is: ${setansi} $(lsb_release -sd) $ransi"
+    GetOriginalInstallDate
+    GetInstallMedia
+    GetDistUpgradeDate
+    nl
+    GetHweRange
+    GetHweKernels
+    CheckHwe
+    CheckIfCertifiedHardwarePlatform
+    GetUserInstalled
+    echo -e "Currently logged in User(s):"
+    who -H
+    nl
+    echo -en "The User running this script was: "
+    id -un
+    id |tr ' ' '\n'|sed 's/,/, /g'| fold -sw 80 |sed 's/ //g'
+    nl
+    GetLiveCD
+    GetWhere
+    GetCmdLine
+}
+
+function GetOriginalInstallDate()
+{
+    # Gets the original installation date. Called once by GetOtherDetails().
+    # Makes best logical efforts.
+    if [ $(sudo find /var/log/installer/ -type f 2> /dev/null | wc -l) -ne 0  ]
+    then
+        installer_date=$(sudo find /var/log/installer/ -type f -printf "%T+\n" 2> /dev/null | sort| head -1 2> /dev/null )
+        installer_date="Original Installation Date:         ${setansi} ${installer_date%.*} $ransi"
+    else
+        debug "$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" > /dev/null | sort| head -1 )" 1 
+        #installer_date=$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" 2> /dev/null | sort | head -1)
+        installer_date=$( \
+            for i in /*; \
+            do \
+                if ! mountpoint -q "$i"; \
+                then \
+                    stat --format='%y %n' "$i"; \
+                else \
+                    echo -e 'Could not accurately determine original Installation Date.'
+                fi; \
+            done \
+            | sort \
+            | head -1 \
+            | sed 's/ .*//' )
+        #installer_date=$(sudo find / -maxdepth 1 -type d -printf "%T+ %p\n" 2> /dev/null | sort | head -1)
+        installer_date="Estimated Installation Date:        ${setansi} ${installer_date%.*} $ransi"
+    fi
+    echo -e "$installer_date"
+}
+
+function GetInstallMedia()
+{
+    # Gets the original install media data. Called once by GetOtherDetails().
+    # Only displays if it was installed traditionally
+    if [ -d /var/log/installer/ ]
+    then
+        installer_media=$(sudo head -n 1 /var/log/installer/media-info | awk '{print "Original Installation Media: "$0}' )
+        echo -e "$installer_media"
+    else
+        echo -e "Original Installation Media: Cannot determine which ISO this was installed from. May have been an image file."
+    fi
+}
+
+function GetDistUpgradeDate()
+{
+    # Gets Do_Release_Update date. Called once by GetOtherDetails().
+    # Displays if it it ever had a do-release-upgrade process done
+    if [ -f /var/log/dist-upgrade/apt.log ]
+    then
+        drg_date=$(sudo egrep -m 1 'Log Time' /var/log/dist-upgrade/apt.log | awk '{"Do-Release-Upgrade Date: "$3 }' )
+        echo -e "$drg_date"
+    else
+        echo -e "Do-Release-Upgrade Date: This system may have not had a 'Release Upgrade' through 'do-release-upgrade'"
+    fi
+}
+
+function GetHweRange() {
+    # Valid current choices for Release numbers LTS are: 18.04, 20.04
+    LSB_Rel=$(lsb_release -sr | cut -c 1-5)
+    case "$LSB_Rel" in
+        ("18.04")
+            LTS_PKG="18.04"
+            ;;
+        ("20.04")
+            LTS_PKG="20.04"
+            ;;
+        ("21.04")
+            LTS_PKG="20.04"
+            ;;
+        ("21.10")
+            LTS_PKG="20.04"
+            ;;
+        ("22.04")
+            LTS_PKG="22.04"
+        (*)
+            echo -e "Something went wrong. Error out of range."
+            exit 1
+    esac    
+
+}
+
+function GetHweKernels()
+{
+    echo -e "These are the current kernel ranges for HWE kernels for this release."
+
+    show_kernels=$(apt-cache show linux-generic-hwe-$LTS_PKG 2> /dev/null \
+        | awk '/Depends:/ {print "For HWE Package: " $2 ", Kernel Version: " $4}' \
+        | sed -e 's/..$//' -e 's/~.*//') 2> /dev/null 
+    echo -e "   --- HWE Kernel Reference from 'apt-cache show':"
+    echo -e "$show_kernels"
+    nl
+}
+
+function CheckHwe()
+{
+    return_status=$(dpkg -s linux-generic-hwe-$LTS_PKG 2>&1 \
+        | grep 'Status\|dpkg-query' )
+    echo -e "   --- HWE Package Status from 'dpkg':"
+        if [[ "$return_status" == *"Status:"* ]]
+        then 
+            echo -e "Package linux-generic-hwe-$LTS_PKG is installed."
+        elif [[ "$return_status" == *"is not installed"* ]]
+        then
+            echo -e "HWE package linux-generic-hwe-$LTS_PKG was not detected. Please check "
+            echo -e "kernel version to verify range"
+        fi
+        nl
+}
+
+function CheckIfCertifiedHardwarePlatform()
+{
+    platform_check=$(ubuntu-drivers list-oem 2> /dev/null )
+    echo -e "   --- Certified Hardware Platform Status: (By the Ubuntu Wiki Standards)"
+    if [ -z $platform_check ]
+    then
+        echo -e "Ubuntu Certified Hardware Platform. Safe to install "
+        echo -e "the Hardware Enablement Stack (HWE)."
+    else
+        echo -e "Hardware meta packages were listed. Please refrain from manually changing "
+        echo -e "the kernel flavours. The Hardware Enablement Stack (HWE) should not be "
+        echo -e "installed on this platform. "
+    fi
+    nl
+}
+
+function GetUserInstalled ()
+{
+    ## Get a list of User Installed Packages
+    manually_installed=$(mktemp /tmp/ManuallyInstalled-XXXXX)
+    default_installed=$(mktemp /tmp/DefaultInstalled-XXXXX)
+    user_installed=$(mktemp /tmp/UserInstalled-XXXXX)
+    
+    echo -e "   --- User Installed Package List:"
+    # Use apt-mark to list all packages marked as manually installed. 
+    apt-mark showmanual | sort -u > $manually_installed
+    # Check to see if defualt installed list exists
+    # for prebuilt system images, it does not exist
+    if [ -f /var/log/installer/initial-status.gz ]
+    then 
+        # Get the list of default installed packages at initial installation.
+        gzip -dc /var/log/installer/initial-status.gz 2> /dev/null | \
+            sed -n 's/^Package: //p' | \
+            sort -u > $default_installed
+    else 
+        touch $default_installed
+    fi
+    # Use compare, to exclude those defaults that are unique, AND exclude defaults 
+    # that are presently marked as manually installed. (Those 'may' have been changed.)  
+    comm -23 $manually_installed $default_installed > $user_installed
+    # Print the list in two columns
+    awk 'NF' $user_installed #\ Removed 2022.03.10 to turn to one column
+    #| pr -2T  # You can remove the pr filter on this to keep output in a single column...
+    nl # Add newline in report
+    # Remove the temporary files
+    rm -f $manually_installed
+    rm -f $default_installed
+    rm -f $user_installed
+}
+
+function GetLiveCD() {
+    livecd_test=""
+    boot_data=$(mount | grep " / " | grep 'squashfs')
+    if [ -z "$boot_data" ] 
+    then
+       livecd_test="an installed system."
+    else
+       livecd_test="a LiveCD."
+    fi
+    echo -e "The 'system-info' script was booted from $livecd_test"
+    nl
+}
+
+function GetWhere() {
+    # Create temp file
+    ssh_data=$(mktemp /tmp/ssh_data-XXXXX)
+    # Redirect/Populate output to temp file
+    w | grep ' w' | grep --color=never ' pts/' > $ssh_data
+    # Ask question
+    if [ -z "$(awk '{print $0}' $ssh_data)" ]
+    then
+        ssh_test="locally on the system"
+    else
+        ssh_test="remotely through an ssh connection."
+    fi
+    # Remove temp file
+    rm -f $ssh_data
+    # Give answer
+    echo -e "The 'system-info' script was run $ssh_test"
+    nl
+}
+
+function GetCmdLine() {
+    cmd_line=$(awk '{print $0}' /proc/cmdline)
+    echo -e "The Linux Kernel Command Line use to boot was: "
+    echo -e "$cmd_line"
+    nl
+}
+
+function AdjustForLessStatus()
+{
+    # Sets Env Vars for less viewer or not (written report). Called once by Writer()
+    if [ "$less_status" == "less" ]
+    then
+        setansi="$blueback"
+        ransi="$resetvid"
+        lshw_cmd='sudo lshw'
+        MessageView
+        MessageLess
+    else
+        setansi=""
+        ransi=""
+        lshw_cmd='sudo lshw -sanitize'
+    fi
+}
+
+function ReportHeader()
+{
+    # Start of report (Header). Called once by Writer()
+    echo -e "Starting the Ubuntu Forums 'system-info' Report: $startt"
+    echo -e '\tPart of the Ama-gi Project'    
+    echo -e '\t'$version
+    nl
+    echo -e "---------------------------------------------------------------"
+    echo -e "Main Complaint: $main_complaint"
+    echo -e "Problem Description:  $problem_description"
+}
+
+function MessageView()
+{
+    # Provides message at start of report. Called once by AdjustForLessStatus().
+    echo -e "This output should first be ${setansi}viewed by less${ransi}, then sent to a file"
+    nl
+}
+
+function MessageLess()
+{
+    # User Instructions for the 'less' utility. Called once by AdjustForLessStatus() and once by Writer() at end of report.
+    echo -e "$redback ---------- INSTRUCTIONS FOR THE VIEWER 'LESS' ---------- $resetvid "
+    echo -e "You are using the viewer 'less'."
+    echo -e "Advance to a next page with the $blueback<SpaceBar>$resetvid key."
+    echo -e "Navigate what has been displayed with the"
+    echo -e "Left/Right/Up/Down Arrow, PageUp, PageDown, Home, or End keys."
+    echo -e "If you are running within a grahical terminal session,"
+    nl
+    echo -e "you can also navigate with the mouse or touchpad."
+    echo -e "Get more built-in help within 'less' with the <H> key."
+    echo -e "At any point while in 'less' or if you see this '(END)' prompt"
+    echo -e "at the lower left of your screen,"
+    echo -e "$blueback quit from 'less' to continue the script with the <q> key. $resetvid"
+    nl
+    SensitiveDataWarning
+ }
+ 
+function SensitiveDataWarning () {
+    echo -e "$redback --- SENSITIVE DATA WARNING --- $resetvid "
+    nl
+    echo -e "This Report is prepared in two versions- "
+    nl
+    echo -e "The 'Your Eyes Only' version, only exists temporarily in memory, and is "
+    echo -e "viewed onscreen by 'less'. The report that is viewed by 'less' onscreen "
+    echo -e "contains 'sensitive data' that should NOT be posted publicly. "
+    nl
+    echo -e "The Final Report 'file' is saved to disk as a file. The Final Report is "
+    echo -e "sanitized, filtered, with the sensitive data removed. It is safe to post "
+    echo -e "online publicly. "
+    nl
+}
+ 
+function ReportFooter()
+{
+    # End of report (the footer). Called once by Writer().
+    echo -e "${setansi}*** End Of Report ***$ransi"
+    if [ "$less_status" == "less" ]
+    then
+        MessageLess
+    fi
+}
+
+function nl() 
+{
+    echo -e ""
+}
+
+function Pause()
+{
+    read -n 1 -s -r -p "Press any key to continue"
+    nl
+}
+
+function ArchiveReport() {
+    #Check if uploaded (successfully)...
+    # $check-paste is 1 at start (not uploaed), 0 if upload was successful.
+    uploaded=$check_paste
+    if [ $uploaded -eq 1 ] 
+    then
+        # Check size of report file, must be less than 19.5kB
+        report_size=$(wc -c $report | awk '{print $1}')
+        if [ $report_size -ge 19500 ]
+        then 
+            echo -e "'$sname.txt' is larger than 19.5kB. ($report_size bytes)"
+            nl
+            echo -e "If you want to attach to a post on Ubuntu Forums as an attachment, "
+            echo -e "you will need to compress the report."
+            nl
+            # Prompt User       
+            ans=
+            while [ "$ans" != "y" ] && [ "$ans" != "Y" ] && [ "$ans" != "n" ] && [ "$ans" != "N" ]
+            do
+                read -erp "Would you like to archive the report? <y/N> " ans 
+                ans="${ans,}" 
+                debug "User answered $ans" 1
+                if [[ $ans =~ ^[Yy]$ ]]
+                then
+                    echo -e "Compressing '$sname.txt' to archive file '$HOME/$sname.tar.gz'."
+                    nl
+                    # Remove old archive file, if present
+                    if [ -f $HOME/$sname.tar.gz ]
+                    then 
+                        rm -f  $HOME/$sname.tar.gz
+                    fi
+                    cwd=$(pwd)    # Save current directory
+                    cd $HOME
+                    # Create Archive without any parent direcetories
+                    tar -czvf $sname.tar.gz $sname.txt
+                    exit_code=$?
+                    # Check if archive was created successfully (catch exit code)
+                    if [ $exit_code -eq 0 ]
+                    then 
+                        echo -e "Archive file can be found at '$HOME/$sname.tar.gz'."
+                        nl
+                        Pause
+                    else
+                        echo -e "$sname.txt was not compressed. Archive file not created."
+                        nl
+                        Pause
+                        exit 1
+                    fi
+                    cd $cwd
+                elif [[ ${ans,} =~ ^[Nn]$ ]]
+                then
+                    if [ $verbosity -eq 5 ]
+                    then 
+                       debug "Continuing without creating archive file..." 
+                       Sleep 1
+                    fi
+                fi
+            done
+        else
+            echo "Report 'size' check complete. ($report_size bytes)"
+            nl
+            sleep 1
+        fi
+    fi
+}
+
+function Writer 
+{
+    # Report template. Called twice by Main().
+    less_status="$1"
+    debug "less_status: $less_status" 1
+    AdjustForLessStatus
+    ReportHeader
+    GetMachineInfo    
+    GetDiskInfo
+    GetUsb
+    GetGraphicsEnv
+    GetRepositories
+    GetOtherDetails
+    if [[ "$less_status" != "less" ]]
+    then
+        ProcessMissingPrograms
+    fi
+    ReportFooter
+}
+
+function PasteCurl()
+{
+    return_url=$(curl -fsSL -X POST \
+        --url $target \
+        --output /dev/null \
+        --write-out "%{url_effective}\n" \
+        --data-urlencode "content@${PASTEBIN_CONTENT:-$report}" \
+        --data "poster=${PASTEBIN_POSTER:-`whoami`@`hostname`}" \
+        --data "syntax=${PASTEBIN_SYNTAX:-text}" \
+        --data "expiration=${PASTEBIN_EXPIRATION:-week}")
+    check_paste=$?
+    debug "Response: $return_url Exit Code: $check_paste" 1;
+}
+
+function PastePastebinit()
+{
+    return_url=$(pastebinit \
+        -a "$USER" \
+        -i "$report" \
+        -b "$target" \
+        -t "$sname.txt")
+    check_paste=$?
+    debug "Response: $return_url Exit Code: $check_paste" 1;
+}
+
+function PasteWget()
+{
+    return_url=$(wget --quiet -O- --post-data="$(cat $report)" 'termbin.com:9999' | tr '\0' '\n' )
+    check_paste=$?
+    debug "Response: $return_url Exit Code: $check_paste" 1;
+}
+
+function PasteNc()
+{
+    echo -e "This uses a program which sometimes conflicts with " 
+    echo -e "Anti-Virus Programs. You should turn that off if you "
+    echo -e "have installed."
+    read -erp "Would you like to proceed or skip? (y/N) " ans
+    if [[ ${ans,} =~ ^[Yy]$ ]]
+    then
+        return_url=$(cat $report | nc termbin.com 9999 | tr '\0' '\n')
+        check_paste=$?
+        debug "Response: $return_url Exit Code: $check_paste" 1;
+    else
+        echo -e "You skipped uploading to Pastebin."
+        check_paste=1
+    fi
+}
+
+function CheckPasterProgs()
+{
+    if [ -e /usr/bin/curl ]
+    then
+        paste_prog=1;
+    elif [ -e /usr/bin/pastebinit ]
+    then
+        paste_prog=2;
+    elif [ -e /usr/bin/wget ]
+    then
+        paste_prog=3;
+    elif [ -e /usr/bin/nc ] || [ -e /bin/nc ]
+    then
+        paste_prog=4;
+    else
+        paste_prog=0;
+        echo -e "Many utilites were not found. Something is wrong.";
+        debug "All progs used for paste where not found" 1
+    fi
+}
+
+function DoPaste()
+{
+    prog_here=$1
+    debug "Passed $prog_here" 1
+    case "$prog_here" in
+        1)
+            PasteCurl
+            ;;
+        2)
+            PastePastebinit
+            ;;
+        3)
+            PasteWget
+            ;;
+        4)
+            PasteNc
+            ;;
+        *)
+            echo -e "Something went wrong. Error out of range."
+            exit 1
+    esac    
+}
+
+function ProgressActive()
+{
+    # Provides a spinner to show progress. Called once by Paster.
+    declare -a spinner=("\b|" "\b/" "\b-" "\b\\" "\b-")
+    
+    echo -ne '         '
+    while test -f "$1"
+     do
+         for spin in "${spinner[@]}"
+         do 
+             stdbuf -oL echo -ne $spin
+             sleep 0.2
+         done
+    done
+    stdbuf -oL echo -en '\b '
+}
+
+function Paster() 
+ {
+     # Provides an upload of report with a progress bar. Called once by Main().
+     target="https://paste.ubuntu.com"
+     linklog="$HOME/${sname}-link.log"
+
+     echo -e "$blueback Sensitive data is [REMOVED] from the report file $resetvid"
+     CheckPasterProgs     
+     ## Eval $paste_prog
+     if [ $paste_prog -ne 0 ]
+     then 
+         read -erp "Do you want to upload the report file to '$target'? (y/N) " ans
+         if [[ ${ans,} =~ ^[Yy]$ ]]
+         then
+             GetPingStatus "www.ubuntu.com"
+             if [ "$return_status" == "true" ]
+             then
+                 echo "Uploading '$report' to '$target'"
+                 echo -e "This may take 1-2 minutes..."
+                 nl
+                 tput civis
+                 keep_spinning=$(mktemp)
+                 ProgressActive "$keep_spinning" & pid_progressactive=$!
+                 DoPaste $paste_prog
+                 if [ $check_paste -eq 0 ]
+                 then
+                    paste_done=true
+                 else
+                    paste_done=false
+                 fi
+                 rm "$keep_spinning"
+                 sleep 0.5
+                 tput cnorm
+                 debug "paste_done: $paste_done" 1
+                 if $paste_done
+                 then
+                     echo -e "Uploaded Report: ${startt}:" >> "$linklog"
+                     echo -e "$blueback Upload successful $resetvid"
+                     nl
+                     echo -e "The link to the pastebin is saved in: '$linklog'"
+                     nl
+                     echo -e "View at: $return_url" | tee -a "$linklog"
+                     nl
+                 else
+                    echo -e "$redback Upload failed $resetvid"
+                     echo -e "Upload the file manually: 'copy & paste' to"
+                     echo -e "https://paste.ubuntu.com/"
+                     nl
+                 fi
+             else
+                    echo -e "No connection to pastebin.ubuntu.com " | tee -a "$linklog"
+                    echo -e "Please copy the file $report to a USB and post "
+                    echo -e "from a computer that does have a working connection."
+                    echo -e "Upload the file manually: 'copy & paste' to"
+                    nl
+                    echo -e "https://paste.ubuntu.com/"
+             fi
+         fi
+    else
+        echo -e "$redback    The required package was not installed.    $resetvid"
+        nl
+        echo -e "Either rerun the script after installing curl, or"
+        echo -e "Upload the file manually: 'copy & paste' to"
+        nl
+        echo -e "https://paste.ubuntu.com/"
+        nl
+    fi
+}
+
+# The following Basic Logger was based on public domain code 
+#     from https://gist.github.com/goodmami/6556701 
+# Rewritten by MAFoElffen, 2021.09.15
+function notify() 
+{
+    logger $silent_lvl "NOTE: $1" $2; 
+}
+
+function critical() 
+{
+    logger $crt_lvl "CRITICAL: $1" $2; 
+}
+
+error() 
+{ 
+   logger $err_lvl "ERROR: $1" $2; 
+}
+
+warn() 
+{ 
+    logger $wrn_lvl "WARNING: $1" $2; 
+}
+
+inf() 
+{ 
+    logger $inf_lvl "INFO: $1" $2; 
+}
+
+debug() 
+{ 
+    logger $dbg_lvl "DEBUG: $1" $2; 
+}
+
+logger() 
+{
+    case "$3" in
+        1)
+            exec 3>&2     # logging stream (file descriptor 3) defaults to STDERR
+            ;;
+        2) 
+            exec 3>> $logfile     # send to log file
+            ;;
+        3)
+            exec 3>&2 | tee $logfile     # send to both logfile and screen
+            ;;
+        *)
+            echo -e "Something went wrong. Log option out of range."
+            exit 1
+            ;;
+    esac
+    
+    
+    if [ $verbosity -ge $1 ]; then
+        # Expand escaped characters, wrap at 70 chars, indent wrapped lines
+        echo -e "$startt $2" | fold -w70 -s | sed '2~1s/^/  /' >&3
+    fi
+}
+
+
+########################################################################
+#### MAIN
+########################################################################
+## PreProcessing
+CheckArgs    # Check external arguments: [<ScriptName> arg1]
+CheckRoot    # Check if ran as root
+CheckPrerequisites
+## Report
+UserInput
+Writer less | less -R    # writing to less
+## Post processing
+RmOldReport
+Writer | sed 's/<filter>/[REMOVED]/g' > "$report"     # Writing to file
+## Epitaph
+echo "The result is stored in '$report'"
+## Optional upload to pastebin paste.ubuntu.com
+Paster
+ArchiveReport
+exit
+
+
+
+########################################################################
+## TODO LIST ##
+########################################################################
+# Continue to improve script, Report layout and UI
+#
+# Recheck all messages and prompts for spelling errors
+#
+# Add comments as script documentation:
+#   - Document logic flow
+#
+# Possibly add more for LVM, ZFS, mdadm, and LUKS information(?)
 }
 
 function GetOtherDetails()
