@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-08, Script Date: 2022.03.10"
+version="Version: 01.00-09, Script Date: 2022.06.01"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -447,6 +447,9 @@ function GetSb()
     # Gets SafeBoot Info from UEFI BIOS or if not UEFI capable. Called once by GetDMI().
     # Warns user if mokutil was not present.
     #echo -e "   --- SecureBoot Status from 'mokutil --sb-state':"
+    
+    ## Bug found on some machines concerning the '--sb-state' option switch on 2022.06.01.
+    #  Shortened to '--sb' (undocumented option switch) 
     if [ $check_mokutil -eq 0 ] 
     then
         echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
@@ -455,7 +458,8 @@ function GetSb()
         echo -e "\tthis information, please install 'mokutil' and rerun script."
     else
         # For Legacy only BIOS, returns error: "EFI variables are not supported on this system"
-        error_mokutil=$(mokutil --sb-state 2>&1 )
+        #error_mokutil=$(mokutil --sb-state 2>&1 )
+        error_mokutil=$(mokutil --sb 2>&1 )
         if [[  "$error_mokutil" == *"EFI variables"*  ]]
         then
             echo -e "$error_mokutil"
@@ -466,7 +470,8 @@ function GetSb()
                 echo -e "\tbut package mokutil was not installed. If you would like to check"
                 echo -e "\tthis information, please install 'mokutil' and rerun script."                
         else
-            sb_state=$(mokutil --sb-state 2>&1 )
+            #sb_state=$(mokutil --sb-state 2>&1 )
+            sb_state=$(mokutil --sb 2>&1 )
             debug "sb_state: $sb_state" 1
             if [[ $sb_state == "Failed to read SecureBoot" ]]
             then
@@ -474,10 +479,12 @@ function GetSb()
                 #printf "%-20s %s\n" ${sb_disabled/ /: }
                 echo -e "$sb_disabled"
             else
-                # These are the three known messages returned from UEFI
+                # These are the four known messages returned from UEFI
                 # This system doesn't support Secure Boot
                 # Secure Boot is enabled
                 # Failed to read SecureBoot
+                # Platform is in Setup Mode
+                #
                 #printf "%-20s %s\n" ${sb_state/ /: }
                 echo -e "$sb_state"
             fi
@@ -658,7 +665,7 @@ function GetStorageControllers() {
     if [ ! -z "$cntrllr_busid_list" ]
     then
         # Parse through list )array) and show detailed information on each
-        for controller in "${cntrllr_busid_list}"
+        for controller in ${cntrllr_busid_list}
         do
             sudo lspci -s $controller -vv
             nl
@@ -861,7 +868,7 @@ function GetDistUpgradeDate()
 }
 
 function GetHweRange() {
-    # Valid current choices for Release numbers LTS are: 18.04, 20.04
+    # Valid current choices for Release numbers LTS are: 18.04, 20.04, 22.04
     LSB_Rel=$(lsb_release -sr | cut -c 1-5)
     case "$LSB_Rel" in
         ("18.04")
@@ -878,8 +885,12 @@ function GetHweRange() {
             ;;
         ("22.04")
             LTS_PKG="22.04"
+            ;;
+        ("22.10")
+            LTS_PKG="22.04"
+            ;;
         (*)
-            echo -e "Something went wrong. Error out of range."
+            echo -e "Something went wrong. LTS Edition out of HWE support range."
             exit 1
     esac    
 
