@@ -2,7 +2,7 @@
 
 ## MAFoElffen, <mafoelffen@ubuntu.com>, 2021.08.19
 ## 
-## Contributers:
+## Contributors:
 ##     sudodus <nio.wiklund@gmail.com>, 2021.08.25
 ##     Doug S,  2021.08.22
 ##     oldfred, 2021.08.20
@@ -552,7 +552,7 @@ function GetInternetStatus()
 
 function GetPingStatus()
 {
-    # Takes arg as IP or URL. Returns psuedo boolean $return_status. Called twice (by Paster() and GetInternetStatus()).
+    # Takes arg as IP or URL. Returns pseudo boolean $return_status. Called twice (by Paster() and GetInternetStatus()).
     ping -c 1 $1 &> /dev/null
     pingStatus=$?
     if [ $pingStatus == 0 ]
@@ -630,7 +630,7 @@ function GetFQDN()
 
 function GetDiskInfo()
 {
-    # Gets filesystem, disk, fstab and moutn information. Called once by Writer().
+    # Gets filesystem, disk, fstab and mount information. Called once by Writer().
     GetStorageControllers
     echo -e "${setansi}---------- File system specs from 'df -h':$ransi"
     df -hT -x tmpfs -x devtmpfs | grep -v '/snap/'
@@ -857,7 +857,7 @@ function GetInstallMedia()
 function GetDistUpgradeDate()
 {
     # Gets Do_Release_Update date. Called once by GetOtherDetails().
-    # Displays if it it ever had a do-release-upgrade process done
+    # Displays if it ever had a do-release-upgrade process done
     if [ -f /var/log/dist-upgrade/apt.log ]
     then
         drg_date=$(sudo egrep -m 1 'Log Time' /var/log/dist-upgrade/apt.log | awk '{"Do-Release-Upgrade Date: "$3 }' )
@@ -1057,7 +1057,7 @@ function MessageLess()
     echo -e "Advance to a next page with the $blueback<SpaceBar>$resetvid key."
     echo -e "Navigate what has been displayed with the"
     echo -e "Left/Right/Up/Down Arrow, PageUp, PageDown, Home, or End keys."
-    echo -e "If you are running within a grahical terminal session,"
+    echo -e "If you are running within a graphical terminal session,"
     nl
     echo -e "you can also navigate with the mouse or touchpad."
     echo -e "Get more built-in help within 'less' with the <H> key."
@@ -1255,7 +1255,7 @@ function CheckPasterProgs()
         paste_prog=4;
     else
         paste_prog=0;
-        echo -e "Many utilites were not found. Something is wrong.";
+        echo -e "Many utilities were not found. Something is wrong.";
         debug "All progs used for paste where not found" 1
     fi
 }
