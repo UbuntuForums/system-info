@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-09, Script Date: 2022.06.01"
+version="Version: 01.00-10, Script Date: 2022.06.03"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -446,10 +446,13 @@ function GetSb()
 {
     # Gets SafeBoot Info from UEFI BIOS or if not UEFI capable. Called once by GetDMI().
     # Warns user if mokutil was not present.
-    #echo -e "   --- SecureBoot Status from 'mokutil --sb-state':"
+    echo -e "   --- SecureBoot Status from 'mokutil':"
     
     ## Bug found on some machines concerning the '--sb-state' option switch on 2022.06.01.
     #  Shortened to '--sb' (undocumented option switch) 
+    # 'mokuitl' Bug was resolved within days...
+    # 2022.06.02, Added fallack error handling for fallback to alternate option flag...
+    # using the documented option flag as the primary method.
     if [ $check_mokutil -eq 0 ] 
     then
         echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
@@ -457,21 +460,28 @@ function GetSb()
         echo -e "\tbut package mokutil was not installed. If you would like to check"
         echo -e "\tthis information, please install 'mokutil' and rerun script."
     else
+        # Added this error handling because of a bug on a 'mokutil', that was resolved
+        # but showed that an error was possible from a faulty update of this utility.
+        error_mokutil=$(mokutil --sb-state 2>&1 )
+        if [[  "$error_mokutil" == *"mokutil: unrecognized option '--sb-state​'"*  ]]
+        then
+            mokutil_cmd=$(mokutil --sb 2>&1 )
+            error_mokutil=$mokutil_cmd
+        else
+            mokutil_cmd=$(mokutil --sb-state 2>&1 )
+        fi
         # For Legacy only BIOS, returns error: "EFI variables are not supported on this system"
-        #error_mokutil=$(mokutil --sb-state 2>&1 )
-        error_mokutil=$(mokutil --sb 2>&1 )
         if [[  "$error_mokutil" == *"EFI variables"*  ]]
         then
             echo -e "$error_mokutil"
         elif [[  "$error_mokutil" == *"Command 'mokutil' not found"*  ]] #
-            then 
-                echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
-                echo -e "\t and checks if the system BIOS was UEFI or Lagacy only BIOS, "
-                echo -e "\tbut package mokutil was not installed. If you would like to check"
-                echo -e "\tthis information, please install 'mokutil' and rerun script."                
+        then 
+            echo -e "\tThis would check / have checked if SecureBoot was enabled or not, "
+            echo -e "\t and checks if the system BIOS was UEFI or Lagacy only BIOS, "
+            echo -e "\tbut package mokutil was not installed. If you would like to check"
+            echo -e "\tthis information, please install 'mokutil' and rerun script."                
         else
-            #sb_state=$(mokutil --sb-state 2>&1 )
-            sb_state=$(mokutil --sb 2>&1 )
+            sb_state=$mokutil_cmd
             debug "sb_state: $sb_state" 1
             if [[ $sb_state == "Failed to read SecureBoot" ]]
             then
@@ -479,11 +489,12 @@ function GetSb()
                 #printf "%-20s %s\n" ${sb_disabled/ /: }
                 echo -e "$sb_disabled"
             else
-                # These are the four known messages returned from UEFI
+                # These are the known messages returned from mokutil
                 # This system doesn't support Secure Boot
                 # Secure Boot is enabled
                 # Failed to read SecureBoot
                 # Platform is in Setup Mode
+                # mokutil: unrecognized option '--sb-state​'
                 #
                 #printf "%-20s %s\n" ${sb_state/ /: }
                 echo -e "$sb_state"
