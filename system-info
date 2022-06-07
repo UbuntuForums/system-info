@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-10, Script Date: 2022.06.03"
+version="Version: 01.00-11, Script Date: 2022.06.06"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -858,10 +858,20 @@ function GetInstallMedia()
     # Only displays if it was installed traditionally
     if [ -d /var/log/installer/ ]
     then
-        installer_media=$(sudo head -n 1 /var/log/installer/media-info | awk '{print "Original Installation Media: "$0}' )
-        echo -e "$installer_media"
+        # Check to See if the media-info file was created before trying to read it...
+        # On some pre-created Ubuntu Image Files now available, the /var/log/installer directory exists
+        # but the files within that directory have been removed before release for distribution.
+        if [ -f /var/log/installer/media-info ]
+        then
+            installer_media=$(sudo head -n 1 /var/log/installer/media-info | awk '{print "Original Installation Media: "$0}' )
+            echo -e "$installer_media"
+        else
+            echo -e "The Installer log directory exists, but the Installer log files have been removed."
+            echo -e "This system may have been installed from a distribution  image file."
+        fi
     else
-        echo -e "Original Installation Media: Cannot determine which ISO this was installed from. May have been an image file."
+        echo -e "Original Installation Media: Cannot determine which ISO this was installed from. "
+        echo =e "The Installer Log Directory does not exist. May have been from a preconfigured image file."
     fi
 }
 
