@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-14, Script Date: 2022.06.12"
+version="Version: 01.00-15, Script Date: 2022.06.12"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -894,13 +894,49 @@ function GetDistUpgradeDate()
 }
 
 function GetHweRange() {
-    # Valid current choices for Release numbers LTS are: 18.04, 20.04, 22.04
+    # Valid current choices for Release numbers LTS are: 14.04 through current DEV versions...
     LSB_Rel=$(lsb_release -sr | cut -c 1-5)
     case "$LSB_Rel" in
+        ("14.04")
+            LTS_PKG="14.04"
+            ;;
+        ("14.10")
+            LTS_PKG="14.04"
+            ;;
+        ("15.04")
+            LTS_PKG="14.04"
+            ;;
+        ("15.10")
+            LTS_PKG="14.04"
+            ;;
+        ("16.04")
+            LTS_PKG="16.04"
+            ;;
+        ("16.10")
+            LTS_PKG="16.04"
+            ;;
+        ("17.04")
+            LTS_PKG="16.04"
+            ;;
+        ("17.10")
+            LTS_PKG="16.04"
+            ;;
         ("18.04")
             LTS_PKG="18.04"
             ;;
+        ("18.10")
+            LTS_PKG="18.04"
+            ;;
+        ("19.04")
+            LTS_PKG="18.04"
+            ;;
+        ("19.10")
+            LTS_PKG="18.04"
+            ;;
         ("20.04")
+            LTS_PKG="20.04"
+            ;;
+        ("20.10")
             LTS_PKG="20.04"
             ;;
         ("21.04")
@@ -917,7 +953,6 @@ function GetHweRange() {
             ;;
         (*)
             echo -e "Something went wrong. LTS Edition out of HWE support range."
-            exit 1
     esac    
 
 }
