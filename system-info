@@ -876,7 +876,7 @@ function GetInstallMedia()
         fi
     else
         echo -e "Original Installation Media: Cannot determine which ISO this was installed from. "
-        echo =e "The Installer Log Directory does not exist. May have been from a preconfigured image file."
+        echo -e "The Installer Log Directory does not exist. May have been from a preconfigured image file."
     fi
 }
 
