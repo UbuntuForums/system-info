@@ -173,7 +173,7 @@ function CheckArgs()
 }
 
 function CheckTypeError() {
-   sudu bash -c 'type -a type' > /dev/null 2>&1
+   type -a type > /dev/null 2>&1
    TypeError=$?
    if [[ "$TypeError" == "1" ]]
    then
