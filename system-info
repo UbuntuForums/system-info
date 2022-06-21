@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-18, Script Date: 2022.06.15"
+version="Version: 01.00-19, Script Date: 2022.06.21"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -173,7 +173,7 @@ function CheckArgs()
 }
 
 function CheckTypeError() {
-   sudu type -a type > /dev/null 2>&1
+   sudu bash -c 'type -a type' > /dev/null 2>&1
    TypeError=$?
    if [[ "$TypeError" == "1" ]]
    then
