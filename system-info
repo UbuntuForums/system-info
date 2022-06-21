@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 01.00-16, Script Date: 2022.06.12"
+version="Version: 01.00-18, Script Date: 2022.06.15"
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
 arg2=$2
@@ -172,6 +172,18 @@ function CheckArgs()
     fi
 }
 
+function CheckTypeError() {
+   sudu type -a type > /dev/null 2>&1
+   TypeError=$?
+   if [[ "$TypeError" == "1" ]]
+   then
+       echo -e "The 'type' command is not found as an internal builtin command on this "
+       echo -e "system. Cannot check for prerequisite Linux utilities used in this script."
+       echo -e "This script will run, but may display some errors."
+       nl
+   fi
+}
+
 function CheckPrerequisites()   
 {
     ## Check if all necessary programs are available. Called once by Main().
@@ -239,11 +251,21 @@ function CheckPrerequisites()
                 missing_programs="$missing_programs\n$Program"
                 debug "'$Program' is not installed" 1
             elif [[ "$Program" == "pastebinit" ]] || [[ "$Program" == "wget" ]] || [[ "$Program" == "curl" ]] || [[ "$Program" == "nc" ]]
-                then
+            then
                 check_prog=0;
                 check_paster=$((check_paster+1));
                 missing_paster_progs="$missing_paster_progs$Program, "
                 missing_programs="$missing_programs\n$Program"
+           # To take care of a permssions check issue on Debian, 2022.06.15
+            elif [[ "$Program" == "fdisk" ]]
+            then
+                LSB_ID=$(lsb_release -si)
+                if [[ "$LSB_ID" == "Debian" ]]
+                then
+                    # Set Debian as an exception
+                    check_prog=0;
+                    debug "System is $LSB_ID" 1
+                fi
             else
                 echo -e "'$Program' is not installed."
                 check_prog=0;
@@ -876,7 +898,7 @@ function GetInstallMedia()
         fi
     else
         echo -e "Original Installation Media: Cannot determine which ISO this was installed from. "
-        echo -e "The Installer Log Directory does not exist. May have been from a preconfigured image file."
+        echo -e "The Installer Log Directory does not exist. This system may have been from a Live Image Environment (LIE)."
     fi
 }
 
@@ -1496,6 +1518,7 @@ logger()
 ## PreProcessing
 CheckArgs    # Check external arguments: [<ScriptName> arg1]
 CheckRoot    # Check if ran as root
+CheckTypeError
 CheckPrerequisites
 ## Report
 UserInput
