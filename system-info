@@ -256,7 +256,7 @@ function CheckPrerequisites()
                 check_paster=$((check_paster+1));
                 missing_paster_progs="$missing_paster_progs$Program, "
                 missing_programs="$missing_programs\n$Program"
-           # To take care of a permssions check issue on Debian, 2022.06.15
+           # To take care of a permissions check issue on Debian, 2022.06.15
             elif [[ "$Program" == "fdisk" ]]
             then
                 LSB_ID=$(lsb_release -si)
@@ -1033,7 +1033,7 @@ function GetUserInstalled ()
     echo -e "   --- User Installed Package List:"
     # Use apt-mark to list all packages marked as manually installed. 
     apt-mark showmanual | sort -u > $manually_installed
-    # Check to see if defualt installed list exists
+    # Check to see if default installed list exists
     # for prebuilt system images, it does not exist
     if [ -f /var/log/installer/initial-status.gz ]
     then 
