@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 02.00-00, Script Date: 2022.08.28"
+version="Version: 02.00-02, Script Date: 2022.10.18"
 exit_code=0
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
@@ -83,10 +83,10 @@ stty -echoctl # hide ^C
 trap 'other_commands' SIGINT
 
 # 'Trap Section' to clean up Temporary Files on unexpected EXIT's
-Trap "rm -f $manually_installed" EXIT 2> /dev/null
-Trap "rm -f $default_installed" EXIT 2> /dev/null
-Trap "rm -f $user_installed" EXIT 2> /dev/null
-Trap "rm -f $ssh_data" EXIT 2> /dev/null
+trap "rm -f $manually_installed" EXIT 2> /dev/null
+trap "rm -f $default_installed" EXIT 2> /dev/null
+trap "rm -f $user_installed" EXIT 2> /dev/null
+trap "rm -f $ssh_data" EXIT 2> /dev/null
 
 ########################################################################
 #### Functions:
@@ -259,7 +259,7 @@ function GetReleaseDescription()
        debug "Got release description from 'lsb_release'." 1
    else
        # Parse through the (possibly) many release file candidates to retrieve the answer...
-       os_name=$(egrep -m 1 'PRETTY_NAME|DISTRIB_DESCRIPTION' /etc/*release | \
+       os_name=$(grep -m 1 'PRETTY_NAME|DISTRIB_DESCRIPTION' /etc/*release | \
            sed 's/\/etc\/.*release://g' | \
            sed -e 's/[Pp][Rr][Ee][Tt][Tt][Yy]_[Nn][Aa][Mm][Ee]=//g'  \
                -e 's/[D,d][E,e][S.s][C,c][R,r][I,i][P,p][T,t][I,i][O,o][Nn]=//g' | \
@@ -274,7 +274,7 @@ function GetReleaseDescription()
    then
        echo -e "There was a problem determining the Release Description... "
        echo -e "Here is the raw outout of the release file(s) to determine manually:"
-       egrep --color=never '=' /etc/*release
+       grep --color=never '=' /etc/*release
        debug "GetReleaseDescription(). Dumped release file info. Condition failed." 1
    else
        echo -e "The current release description is: ${setansi} $os_name $ransi"
@@ -292,7 +292,6 @@ function CheckPrerequisites()
         sudo
     	cat
     	grep
-    	egrep
     	awk
     	free
     	gsettings
@@ -618,6 +617,7 @@ function GetMachineInfo()
     GetCPU
     GetDmi
     GetMem
+    GetSwap
     GetNetworkingInfo
     GetHostname
     nl 
@@ -653,7 +653,7 @@ function GetCPU()
         nl
     else
         echo -e "  --- Computer/CPU Information from '/proc/cpuinfo' --- "
-        egrep -m 1 -Ei 'model name' /proc/cpuinfo | sed 's/model name.*:.//g'
+        grep -m 1 -Ei 'model name' /proc/cpuinfo | sed 's/model name.*:.//g'
         nl
     fi
 }
@@ -813,6 +813,35 @@ function GetMem()
     unset -v mem_stats
 }
 
+function GetSwap () {
+    # Gets more swap information. Called once by GetMachineInfo().
+    fstab_info=$(grep 'swap' /etc/fstab )
+    swaps_info=$(awk '{print $0}' /proc/swaps )
+    sw_proc=$(awk '{print $0}' /proc/sys/vm/swappiness )
+    sw_sysctl=$(grep 'vm.swappiness' /etc/sysctl.conf )
+    valid_settings="10 - 60"
+    
+    if [ "$sw_sysctl" == "" ]
+    then
+        sw_stsctl="If setting 'vm.swappiness' is not declared in '/etc/systctl', then the system inherits the default setting of '60'."
+    fi
+    
+    echo -e "${setansi}---------- Swap Information:$ransi"
+    echo -e "  --- Info from 'fstab'"
+    echo -e "$fstab_info"
+    nl
+    echo -e "  --- Info from '/proc/swaps'"
+    echo -e "$swaps_info"
+    nl
+    echo -e "  --- System Swapiness Settings"
+    echo -e "Valid swappiness settings are from $valid_settings . "
+    echo -e "Current setting in '/proc/sys/vm/swappiness': $sw_proc "
+    echo -e "Current configuration setting in '/etc/sysctl.conf file: "
+    echo -e "$sw_sysctl"
+    nl
+    unset -v fstab_info swaps_info sw_proc sw_sysctl valid_settings
+}
+
 function GetUsb()
 {
     # Gets USB information. Called once by Writer().
@@ -837,6 +866,7 @@ function GetNetworkingInfo()
         nl
     fi
     CheckIpUp show
+    GetMoreWirelessInformation
 }
 
 function GetInternetStatus()
@@ -991,9 +1021,26 @@ function GetDiskInfo()
     GetZfsInfo
     GetLuksInfo
     echo -e "${setansi}---------- Mount Details of '/etc/fstab':$ransi"
-    egrep -v '#' /etc/fstab
+    grep -E -v '#' /etc/fstab
     nl
     GetMountInfo
+    GetMoreDiskInfo
+}
+
+function GetMoreDiskInfo() {
+    echo -e "For more detailed disk Information, please run the 'boot-info' script "
+    echo -e "from: (STABLE) https://launchpad.net/~yannubuntu/+archive/ubuntu/boot-repair "
+    nl
+}
+
+function GetMoreAlsaInformation() {
+    echo -e "For more detailed audio information, get and run the script at: http://www.alsa-project.org/alsa-info.sh "
+    nl
+}
+
+function GetMoreWirelessInformation() {
+    echo -e "For more detailed wireless information, get and run the script at https://github.com/UbuntuForums/wireless-info "
+    nl
 }
 
 GetMountInfo()
@@ -1093,7 +1140,7 @@ function GetGraphicsEnv()
 {
     # Gets Graphics Layer Information. Called once by Writer().
     # Do not call $lshw_cmd if lshw is not installed...
-    if [[ "$check_lshw" == "0" ]] && [[ $detail_level == "-v" ]]
+    if [[ "$check_lshw" == "0" ]] && [[ "$detail_level" == "-v" ]]
     then
     
         echo -e "${setansi}---------- Video Details from 'lshw':$ransi"
@@ -1144,8 +1191,13 @@ function GetGraphicsEnv()
     if [ "$DESKTOP_SESSION" != "" ]
     then
         echo -e "The Current Desktop Session is: $DESKTOP_SESSION "
-        xmode=$(xrandr -q 2> /dev/null | \
-            egrep --color=never -e 'Screen' -e 'connected ')
+        if [[ "$detail_level" == "-v" ]]
+        then
+            xmode=$(xrandr -q 2> /dev/null | \
+                grep -E --color=never -e 'Screen' -e 'connected ')
+        else
+            xmode=$(xrandr -q 2> /dev/null )
+        fi
         echo -e "The Current X Desktop Information Details from 'xrandr' are: "
         echo -e "$xmode" 
     else
@@ -1158,8 +1210,8 @@ function GetGraphicsEnv()
         echo -e "The Current Session Type is: $XDG_SESSION_TYPE " 
     else
         session_type=$(ps -e | \
-            egrep -e 'tty' | \
-            egrep -e 'x11|Xorg|wayland' | \
+            grep -E -e 'tty' | \
+            grep -E -e 'x11|Xorg|wayland' | \
             awk '{print $4}')
         if [ "$session_type" != "" ]
         then
@@ -1172,7 +1224,7 @@ function GetGraphicsEnv()
     
     if [ -f /etc/X11/default-display-manager ]
     then
-        display_manager=$(egrep /usr/sbin/ /etc/X11/default-display-manager | \
+        display_manager=$(grep -E -e '/usr/sbin/' /etc/X11/default-display-manager | \
             sed 's/\/usr\/sbin\///g')
         echo "The Current Display Manager is: $display_manager" 
     else
@@ -1226,7 +1278,8 @@ function GetSoundDevices() {
         echo -e "No sound devices found. Also check in 'lsusb' section."
         nl
     fi
-    echo -e "For more detailed audio information, get and run the script at: http://www.alsa-project.org/alsa-info.sh "
+    GetMoreAlsaInformation
+
     unset -v sound_device sound_device_list
 }
 
@@ -1283,7 +1336,6 @@ function GetOtherDetails()
     GetOriginalInstallDate
     GetInstallMedia
     GetDistUpgradeDate
-    nl
     GetHweInfo
     GetUserInstalled
     GetSnapInstalled
@@ -1358,12 +1410,13 @@ function GetDistUpgradeDate()
     # Displays if it ever had a do-release-upgrade process done
     if [ -f /var/log/dist-upgrade/apt.log ]
     then
-        drg_date=$(sudo egrep -m 1 'Log Time' /var/log/dist-upgrade/apt.log | \
+        drg_date=$(sudo grep -E -m 1 -e 'Log Time' /var/log/dist-upgrade/apt.log | \
             awk '{"Do-Release-Upgrade Date: "$3 }' ) # Local Var
         echo -e "$drg_date"
     else
         echo -e "Do-Release-Upgrade Date: This system may have not had a 'Release Upgrade' through 'do-release-upgrade'"
     fi
+    nl
     unset -v drg_date
 }
 
