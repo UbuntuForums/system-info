@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 02.00-02, Script Date: 2022.10.18"
+version="Version: 02.00-03, Script Date: 2022.10.29"
 exit_code=0
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
@@ -41,6 +41,11 @@ arg2=$2
 # Set Report filename and path to
 sname="${0##*/}"   # flexible, needs quoting everywhere if spaces
 report="$HOME/${sname}.txt"
+#  Get present Locale settings
+localectl_status=$(localectl status  )
+locale_state=$(locale )
+LANG_Hx=$LANG
+LC_CTYPE_Hx=$LC_CTYPE
 # Set locale language settings
 LANG=C
 LC_CTYPE=C
@@ -87,6 +92,7 @@ trap "rm -f $manually_installed" EXIT 2> /dev/null
 trap "rm -f $default_installed" EXIT 2> /dev/null
 trap "rm -f $user_installed" EXIT 2> /dev/null
 trap "rm -f $ssh_data" EXIT 2> /dev/null
+trap "ResetLocale" EXIT 2> /dev/null
 
 ########################################################################
 #### Functions:
@@ -146,6 +152,7 @@ function CheckArgs()
     then
         # Versioning: At the commandline: [<ScriptName> -v] returns <VersionInfo>, then exits. 
         echo -e "$version";
+        ResetLocale
         exit;
     elif [[ "$arg1" == "-h" ]] || [[ "$arg1" == "--help" ]]
     then
@@ -186,6 +193,7 @@ function CheckArgs()
         echo -e "pastebin. Or added as a text attachment to a post."
         nl
         echo -e "We have tried to keep this safe and simple to use."
+        ResetLocale
         exit;
     elif [[ "$arg1" == "-s" ]] || [[ "$arg1" == "--show" ]]
     then
@@ -194,6 +202,7 @@ function CheckArgs()
             verbosity=$arg2
         else
             echo -e "Startup Option out of range."
+            ResetLocale
             exit_code=1
             exit $exit_code;
         fi
@@ -202,6 +211,11 @@ function CheckArgs()
         detail_level='-vv'
         zfs_detail=0
     fi
+}
+
+function ResetLocale() {
+    LANG=$LANG_Hx
+    LC_CTYPE=$LC_CTYPE_Hx  
 }
 
 function CheckTypeError() {
@@ -537,6 +551,7 @@ function CheckPrerequisites()
             then
                 echo -e "Please install the missing programs listed above before rerunning script." 
                 debug "User choose to exit after missing programs." 1
+                ResetLocale
                 exit_code=0
                 exit $exit_code
             elif [[ ${ans,} =~ ^[Cc]$ ]]
@@ -1278,9 +1293,63 @@ function GetSoundDevices() {
         echo -e "No sound devices found. Also check in 'lsusb' section."
         nl
     fi
+    if [[ "$detail_level" == "-vv" ]]
+    then
+        # Only displays in detailed mode
+        echo -e "   --- More Sound Device info from 'aplay' ----"         
+        aplay --list-devices --list-pcms
+        nl
+    fi
     GetMoreAlsaInformation
 
     unset -v sound_device sound_device_list
+}
+
+function GetKeyMap() {
+    echo -e "${setansi}---------- KeyMap and Locale Information from from various sources:$ransi"
+
+    # setxkbmap & xset are part of package 'x11-xserver-utils', not installed if no xserver present.
+    # In Ubuntu: /etc/default/... cfg are keyboard and locale files
+    get_console_desktop=$([ -d /usr/share/xsessions/ ] && \
+        echo "Desktop" || \
+        echo "Console") # Local Var
+    if [ "$get_console_desktop" == "Desktop" ]
+    then
+        echo -e "   --- Keymap Info from 'setxkbmap' ----"  
+        setxkbmap -query  2> /dev/null
+        nl
+        if [[ "$detail_level" == "-vv" ]]   
+        then  
+            echo -e "   --- More Keymap Info from 'xset' ----"  
+            xset -q 2> /dev/null
+            nl
+            echo -e "   --- More Keymap Info from 'gsettings' ----" 
+            input_sources=$(gsettings get org.gnome.desktop.input-sources sources 2> /dev/null ) 
+            echo -e "gsettings input-sources:  $input_sources "
+            nl
+        fi
+    else
+        echo -e "   --- Keymap Info from 'setxkbmap' ----"
+        if [ -f /etc/default/keyboard ] 
+        then 
+            awk '{print $0}' /etc/default/keyboard
+            nl
+        else
+            echo -e "This is console-only and not Debian Branch."
+            nl
+        fi
+    fi
+          
+    echo -e "   --- Locale Info from 'localectl' ----"  
+    echo -e "$localectl_status"
+    nl 
+    if [[ "$detail_level" == "-vv" ]]   
+    then  
+        echo -e "   --- More Locale Info from 'locale' ----"  
+        echo -e "$locale_state"
+        nl
+    fi
+    unset -v get_console_desktop input_sources
 }
 
 function GetRepositories()
@@ -1393,13 +1462,23 @@ function GetInstallMedia()
             installer_media=$(sudo head -n 1 /var/log/installer/media-info | \
                 awk '{print "Original Installation Media: "$0}' ) # Local Var
             echo -e "$installer_media"
+        elif [ -f /var/anaconda/journal.log ]
+        then
+            # RHEL Branch
+            installer_media=$(grep -i 'CDLABEL' | head -n 1 | awk '{print $10}' | sed 's/root=live:CDLABEL=//g' )
+            echo -e "$installer_media"
+        elif [ -f /var/anaconda/journal.log ]
+        then
+            # SUSE Branch
+            installer_media=$(sudo grep 'alias' /var/log/zypper.log | grep 'SUSE' | head -n 1 | awk '{print $10}' )
+            echo -e "$installer_media"
         else
             echo -e "The Installer log directory exists, but the Installer log files have been removed."
             echo -e "This system may have been installed from a distribution  image file."
         fi
     else
-        echo -e "Original Installation Media: Cannot determine which ISO this was installed from. "
-        echo -e "The Installer Log Directory does not exist. This system may have been from a Live Image Environment (LIE)."
+        echo -e "Original Installation Media: Cannot determine which ISO this was installed from (yet). "
+        echo -e "The Installer Log Directory does not exist. "
     fi
     unset -v installer_media
 }
@@ -1915,6 +1994,7 @@ function PassPhrase() {
         sleep 0.2
     else
         echo -e "Exiting script"
+        ResetLocale
         exit_code=106
         exit $exit_code
     fi
@@ -1972,6 +2052,7 @@ function ArchiveReport() {
                         echo -e "$sname.txt was not compressed. Archive file not created."
                         nl
                         Pause
+                        ResetLocale
                         exit 1
                     fi
                     cd $cwd
@@ -2006,6 +2087,7 @@ function Writer
     GetGraphicsEnv
     GetSoundDevices
     GetRepositories
+    GetKeyMap
     GetOtherDetails
     if [[ "$less_status" != "less" ]]
     then
@@ -2107,6 +2189,7 @@ function DoPaste()
             ;;
         *)
             echo -e "Something went wrong. Error out of range."
+            ResetLocale
             exit_code=105
             exit $exit_code
     esac    
@@ -2276,6 +2359,7 @@ logger()
             ;;
         *)
             echo -e "Something went wrong. Log option out of range."
+            ResetLocale
             exit 1
             ;;
     esac
@@ -2317,6 +2401,7 @@ ReportCleaner
 Paster
 ## Optional - Archive Report if size larger than 19.5k
 ArchiveReport
+ResetLocale
 exit $exit_code
 
 
