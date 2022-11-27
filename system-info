@@ -214,6 +214,9 @@ function CheckArgs()
     elif [[ "$arg1" == "-r" ]] || [[ "$arg1" == "--refresh" ]]
     then 
         RefreshScript
+        Pause
+        exit_code=0
+        exit $exit_code
     fi
 }
 
