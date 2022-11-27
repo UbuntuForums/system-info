@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 02.00-03, Script Date: 2022.10.29"
+version="Version: 02.00-04, Script Date: 2022.11.26"
 exit_code=0
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
@@ -175,6 +175,7 @@ function CheckArgs()
         echo -e "    -d or --details Displays more details to Report"
         echo -e "        Adds more details to GPU,Storage Controller, Sound devices, "
         echo -e "            and ZFS (if installed)."
+        echo -e "    -r or --refresh Update script to latest version."
         nl
         echo -e "Parts of the script need elevated permissions (sudo) to get the correct " 
         echo -e "information from your system, while other parts do not. We have "
@@ -210,6 +211,9 @@ function CheckArgs()
     then 
         detail_level='-vv'
         zfs_detail=0
+    elif [[ "$arg1" == "-r" ]] || [[ "$arg1" == "--refresh" ]]
+    then 
+        RefreshScript
     fi
 }
 
@@ -229,6 +233,31 @@ function CheckTypeError() {
        nl
    fi
    unset -v TypeError
+}
+
+function RefreshScript() {
+    # Upgrade script in-place
+    SOURCE=${BASH_SOURCE[0]}
+
+    while [ -L "$SOURCE" ]
+    # resolve $SOURCE until the file is no longer a symlink
+    do 
+        DIR=$( cd -P "$( dirname "$SOURCE" )" > /dev/null 2>&1 && pwd )
+        SOURCE=$(readlink "$SOURCE")
+        if [[ $SOURCE != /* ]] 
+        then 
+            SOURCE=$DIR/$SOURCE
+        fi 
+    done
+
+    DIR=$( cd -P "$( dirname "$SOURCE" )" > /dev/null 2>&1 && pwd )
+
+    cd $DIR
+
+    wget -N -t 5 -T 10 https://github.com/UbuntuForums/system-info/raw/main/system-info
+    chmod +x system-info
+    echo -e "Script was refeshed."
+    nl
 }
 
 function CheckDebianBranch()
@@ -860,11 +889,17 @@ function GetSwap () {
 function GetUsb()
 {
     # Gets USB information. Called once by Writer().
-    echo -e "${setansi}---------- USB Information from 'lsusb -t -v':$ransi"
-    usb_info=$(lsusb -t $detail_level)
-    echo -e "$usb_info"
+    # Check condition added for IBM System 390.
+    if [ -d /sys/bus/usb/devices ]
+    then
+        echo -e "${setansi}---------- USB Information from 'lsusb -t -v':$ransi"
+        usb_info=$(lsusb -t $detail_level)
+        echo -e "$usb_info"
+    else
+        echo "System does not have USB devices."
+    fi
     nl
-    unset -v usb_info
+    unset -v usb_info 
 }
 
 function GetNetworkingInfo()
@@ -1076,7 +1111,7 @@ function GetZfsInfo()
 {
     zfs_part_type=$(sudo fdisk -l 2>&1 | \
         sed '/\/dev\/loop/,+3 d' 2> /dev/null | \
-        uniq | grep -m 1 'Solaris root\|Solaris boot' ) # Local Var
+        uniq | grep -m 1 'Solaris\|FreeBSD' ) # Local Var
     zfs_fs_type=$(df -hT -x tmpfs -x devtmpfs | \
         grep -v '/snap/' | \
         grep -m 1 'rpool') # Local Var
@@ -1588,6 +1623,9 @@ function GetHweRange() {
         ("22.10")
             LTS_PKG="22.04"
             ;;
+        ("23.04")
+            LTS_PKG="22.04"
+            ;;
         (*)
             echo -e "Something went wrong. LTS Edition out of HWE support range."
     esac    
@@ -1948,6 +1986,12 @@ function MessageLess()
     SensitiveDataWarning
  }
  
+function MessageWait() 
+{
+    echo -e "Processing Report. This may take about 30 seconds."
+    nl
+}
+
 function SensitiveDataWarning() 
 {
     echo -e "$redback --- SENSITIVE DATA WARNING --- $resetvid "
@@ -2385,9 +2429,11 @@ CheckTypeError
 CheckPrerequisites
 ## Report
 UserInput
+MessageWait
 Writer less | \
     less -R    # writing to less
 ## Post processing
+MessageWait
 RmOldReport
 #RestorePath ## This needed if we ever get CheckPath() working
 Writer | \
@@ -2402,6 +2448,7 @@ Paster
 ## Optional - Archive Report if size larger than 19.5k
 ArchiveReport
 ResetLocale
+Pause  ## Put in to pause before exit, when using a file manager to run script.
 exit $exit_code
 
 
