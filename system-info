@@ -261,6 +261,7 @@ function RefreshScript() {
     chmod +x system-info
     echo -e "Script was refeshed."
     nl
+    unset DIR SOURCE
 }
 
 function CheckDebianBranch()
@@ -2435,6 +2436,8 @@ UserInput
 MessageWait
 Writer less | \
     less -R    # writing to less
+# For unknown reasons, but related to the pipe timing,  we need to waste a bit of time here
+sleep 0.2
 ## Post processing
 MessageWait
 RmOldReport
