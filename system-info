@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 02.00-05, Script Date: 2022.12.08"
+version="Version: 02.00-06, Script Date: 2023.03.20"
 exit_code=0
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
@@ -257,8 +257,8 @@ function RefreshScript() {
 
     cd $DIR
 
-    wget -N -t 5 -T 10 https://github.com/UbuntuForums/system-info/raw/main/system-info
-    chmod +x system-info
+    sudo wget -N -t 5 -T 10 https://github.com/UbuntuForums/system-info/raw/main/system-info
+    sudo chmod +x system-info
     echo -e "Script was refeshed."
     nl
     unset DIR SOURCE
