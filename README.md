@@ -27,5 +27,16 @@ Or, from a GUI Desktop, this way:
 2. In Nautilus or other file broswer, From File Properties, Permissions, Make it executable.
 3. Run it from your file browser or a Run dialog from kdialog
 
+## Install Script from Debian Package
+
+The UbuntuForums 'system-info' Script is now available to install as a .deb package from it's PPA at:
+https://launchpad.net/~mafoelffen/+archive/ubuntu/system-info
+
+You can add this PPA to your system and install the package with:
+
+    sudo add-apt-repository ppa:mafoelffen/system-info
+    sudo apt update
+    sudo apt install system-info
+    
 [1]: https://github.com/UbuntuForums/system-info/raw/main/system-info
 
