@@ -72,7 +72,11 @@ check_paste=1
 missing_paster_progs=""
 # Variable to add more detail to Report
 detail_level='-v'
+bios_detail=1
 zfs_detail=1
+md_detail=1
+lvm2_detail=1
+btrfs_detail=1
 # Logger settings
 #     Change verbosity to show level of warnings. Range: -1 through 5. -1 is show nothing.
 verbosity=-1
@@ -211,6 +215,11 @@ function CheckArgs()
     then 
         detail_level='-vv'
         zfs_detail=0
+        bios_detail=0
+        md_detail=0
+        lvm2_detail=0
+        btrfs_detail=0
+
     elif [[ "$arg1" == "-r" ]] || [[ "$arg1" == "--refresh" ]]
     then 
         RefreshScript
@@ -786,7 +795,18 @@ function GetDmi()
     printf "%-20s %s\n" "Current boot mode:" "$boot_mode"
     GetSb
     nl
+    GetDmiDetails
     unset -v dmi_idx dmi_var dmi_vars dmi_content dmi_title
+}
+
+function GetDmiDetails()
+{
+    if [ $bios_detail -eq 0 ]
+    then
+        echo -e "Further details from BIOS:"
+        sudo dmidecode -t 0,1,4
+        nl
+    fi
 }
 
 function GetSb()
@@ -1075,6 +1095,9 @@ function GetDiskInfo()
     nl
     GetZfsInfo
     GetLuksInfo
+    GetBtrfs
+    GetLvm2
+    GetMdDevices
     echo -e "${setansi}---------- Mount Details of '/etc/fstab':$ransi"
     grep -E -v '#' /etc/fstab
     nl
@@ -1119,7 +1142,7 @@ function GetZfsInfo()
         uniq | grep -m 1 'Solaris\|FreeBSD' ) # Local Var
     zfs_fs_type=$(df -hT -x tmpfs -x devtmpfs | \
         grep -v '/snap/' | \
-        grep -m 1 'rpool') # Local Var
+        grep -m 1 'zfs') # Local Var # value Type='zfs' would be in field $2
     
     if [[ "$zfs_part_type" != "" ]]
     then
@@ -1133,10 +1156,15 @@ function GetZfsInfo()
             if [ $zfs_detail -eq 0 ]
             then
                 # Shown only if --details or -d option is used 
-                zfs list
+                sudo zfs list
                 nl
-                zpool list
+                sudo zpool list
                 nl
+                sudo zpool status -v
+                nl
+                sudo zpool iostat
+                nl
+                GetZfsProperties
             else 
                 echo -e "If you restart the script adding a '-d' startup option, it will show more details."
                 nl
@@ -1147,6 +1175,33 @@ function GetZfsInfo()
         nl
     fi
     unset -v zfs_part_type zfs_fs_type
+}
+
+function GetZfsProperties()
+{
+    # Get a list of all Pool Names
+    PdList=$(sudo zpool list | awk '{print $1}' | grep -v 'NAME' )
+
+    for PoolDatasetName in ${PdList}
+    do
+        # Get the 'pool/dataset' upper field from the pool name
+        PoolDataset=$(sudo zfs list -r $PoolDatasetName | grep -v 'NAME' | head -n2 | tail -1 | awk '{print $1}' )
+        echo -e "---- $PoolDataset Properties"
+        echo ""
+    
+        # Get Pool level property values
+        for value1 in ashift capacity fragmentation health
+        do
+            sudo zpool get $value1 $PoolDatasetName | grep -v 'NAME'
+        done
+    
+        # Get Dataset level property values
+        for value2 in sync recordsize compression compressratio atime xattr logbias dedup acltype copies volblocksize
+        do 
+            sudo zfs get $value2 $PoolDataset | grep -v 'NAME'
+        done
+        echo ""
+    done
 }
 
 function GetLuksInfo()
@@ -1162,6 +1217,145 @@ function GetLuksInfo()
     unset -v luks_fs_type
 }
 
+function GetMdDevices()
+{
+    echo -e "${setansi}----------  mdadm RAID Information:$ransi"
+    # Test for md devices
+    md_devs=$(ls /sys/class/block/md*/md/* 2> /dev/null)
+
+    if [ ! -z "$md_devs" ]
+    then 
+        echo -e "mdadm RAID device present."
+        nl
+        grep 'raid\|level' /proc/mdstat | grep -v 'Personalities'
+        nl
+        md_detail=0
+    else
+        echo -e "No active md devices present."
+        MdFile=$(grep '\/dev\/md\/' /etc/mdadm/mdadm.conf 2> /dev/null )
+        if [ ! -z "$MdFile" ]
+        then 
+            nl
+            echo -e "Inactive md devices from /etc/mdadm/mdadm.conf file: "
+            echo -e "$MdFile"
+            nl
+        fi
+    fi
+    #nl
+    
+    GetMdInfo
+}
+
+function GetMdInfo()
+{
+    if [ $md_detail -eq 0 ]
+    then 
+        sudo mdadm -D /dev/md* 2> /dev/null
+        nl
+        grep '\/dev\/md\/' /etc/mdadm/mdadm.conf 2> /dev/null
+        nl
+    fi
+}
+
+function GetBtrfs()
+{
+    echo -e "${setansi}----------  BTRFS Information:$ransi"
+    # Show BTRFS dev's and their mounts
+    bt_lsblk=$(sudo lsblk -o name,mountpoint,size,fstype,UUID | \
+        grep 'btrfs' | \
+        awk '{print $1 "  " $2}' | \
+        cut -b 7- | \
+        sed 's/^/\/dev\//g')
+
+    if [ -z "$bt_lsblk" ]
+    then 
+        echo -e "There are no BTRFS vdev's present."
+        nl
+    else
+        echo -e "There are BTRFS vdev's present: "
+        nl
+        echo -e "BT_VDEV    MOUNT"
+        echo -e "$bt_lsblk"
+        nl
+        btrfs_detail=0 # Set flag for BTRFS present
+        GetBtrfsInfo
+    fi
+}
+
+function GetBtrfsInfo()
+{
+    if [ $btrfs_detail -eq 0 ]
+    then
+        # Get for BTRFS volume names
+        btdev_vols=$(mount | \
+            grep 'btrfs' | \
+            awk '{print $3}' )
+
+        for vol in ${btdev_vols[@]}
+        do
+            SubVolName=$(sudo btrfs subvol list $vol | \
+                awk '{print $9} ' )
+    
+            if [ -z "$SubVolName" ]
+            then
+                echo -e "BTRFS filesystem present on $vol, but no BTRFS SubVolumes there."
+                nl
+            else
+                sudo btrfs subvol show -h $vol
+                nl
+            fi
+        done
+    fi
+}
+
+function GetLvm2()
+{
+    echo -e "${setansi}----------  LVM2 Information:$ransi"
+    # ID LVM filesystem
+    lvm_vdev=$(sudo lsblk -o name,mountpoint,fstype | \
+        grep 'LVM' | \
+        cut -b 7- | \
+        sed 's/^/\/dev\//g' )
+    mapper_vdev=$(ls /dev/mapper/ | \
+        grep -v 'control' )
+
+    if [ ! -z "$lvm_vdev" ] && [ ! -z "$mapper_vdev" ]
+    then
+        echo -e "LVM2 is installed."
+        nl
+        lvm2_detail=0
+        GetLvm2Info
+    else
+        echo -e "There are no LVM2 volumes present."
+        nl
+    fi
+    #nl
+}
+    
+function GetLvm2Info()
+{    
+    if [ $lvm2_detail -eq 0 ]
+    then
+        sudo pvs -v
+        nl
+        sudo pvscan -v
+        nl
+        sudo pvdisplay -v -m
+        nl
+        sudo vgs -v
+        nl
+        sudo vgscan -v
+        nl
+        sudo vgdisplay -v
+        nl
+        sudo lvs -a -o name,segtype,devices
+        nl
+        sudo lvscan -v
+        nl
+        sudo lvdisplay -v
+        nl
+fi
+}
 
 function GetStorageControllers() {
     # Based on this information: 
@@ -1550,7 +1744,7 @@ function GetHweInfo()
         if [[ "$ubuntu_flavor" == "0" ]]
         then
             GetHweRange
-            if [ ! -z $LTS_PKG ]
+            if [ ! -z "$LTS_PKG" ]
             then
                 GetHweKernels
                 CheckHwe
@@ -2471,6 +2665,5 @@ exit $exit_code
 #   - Document logic flow
 #
 # Add DEBUG statements:
-#   - To be able to step through logic flow for maintence.
-#
-# Possibly add more for LVM, ZFS, mdadm, and LUKS information(?)
+#   - To be able to step through logic flow for maintenence.
+# 
