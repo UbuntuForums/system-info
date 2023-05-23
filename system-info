@@ -1294,7 +1294,7 @@ function GetBtrfsInfo()
 
         # Get for BTRFS volume names
         btdev_vols=$(mount | \
-            grep -v 'snap\' | \
+            grep -v 'snap' | \
             grep 'btrfs' | \
             awk '{print $3}' )
             
