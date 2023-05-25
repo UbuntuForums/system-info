@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 02.00-08, Script Date: 2023.05.23"
+version="Version: 02.00-08, Script Date: 2023.05.24"
 exit_code=0
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
@@ -1263,10 +1263,9 @@ function GetBtrfs()
     # Show BTRFS dev's and their mounts
     bt_lsblk=$(sudo lsblk -o name,mountpoint,size,fstype,UUID | \
         grep 'btrfs' | \
-        grep -v 'snap\|loop' | \
         awk '{print $1 "  " $2}' | \
-        cut -b 7- | \
-        sed 's/^/\/dev\//g' )
+        sed 's/var.*//g' | \
+        sed 's/^[\|,`]-/\|_/g' )
         
     # echo "Debug -- bt_lsblk: $bt_lsblk"
 
@@ -1277,7 +1276,7 @@ function GetBtrfs()
     else
         echo -e "There are BTRFS vdev's present: "
         nl
-        echo -e "BT_VDEV    MOUNT"
+        echo -e "BT_VDEV    MOUNT "
         echo -e "$bt_lsblk"
         nl
         btrfs_detail=0 # Set flag for BTRFS present
