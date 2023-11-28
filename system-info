@@ -33,7 +33,7 @@
 #### Variables
 ########################################################################
 # Versioning
-version="Version: 02.00-08, Script Date: 2023.05.24"
+version="Version: 02.00-09, Script Date: 2023.11.28"
 exit_code=0
 #md5_sum=$(md5sum $sname | sed 's/system.*//g' )
 arg1=$1
@@ -1413,7 +1413,10 @@ function GetGraphicsEnv()
     # Do not call $lshw_cmd if lshw is not installed...
     if [[ "$check_lshw" == "0" ]] && [[ "$detail_level" == "-v" ]]
     then
-    
+        if [[ "$detail_level" == "-v" ]]
+        then
+            lspci_detail="-nnk"
+        fi
         echo -e "${setansi}---------- Video Details from 'lshw':$ransi"
         nl
         #lshw_data=$(sudo lshw -C video )
@@ -1433,7 +1436,7 @@ function GetGraphicsEnv()
     else
         # Use alternate method to display GPU info
         echo -e "${setansi}---------- Video Details from 'lspci':$ransi"
-        #lspci | grep -i vga | sed 's/[0-9][0-9]:[0-9][0-9]\.[0-9] //g'
+        #lspci | grep -i 'VGA\|Display\|3D' | sed 's/[0-9][0-9]:[0-9][0-9]\.[0-9] //g'
         gpu_list=$(sudo -i lspci | \
             grep --color=never -i -e 'VGA' | \
             awk '{print $1}')
@@ -1443,7 +1446,7 @@ function GetGraphicsEnv()
             # Parse through list )array) and show detailed information on each
             for gpu in ${gpu_list}
             do
-                sudo -i lspci -s $gpu $detail_level
+                sudo -i lspci -s $gpu $lspci_detail
                 nl
             done
         else
